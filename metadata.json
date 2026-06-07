@@ -1,0 +1,8 @@
+{
+  "name": "ONTAR_Hisab",
+  "description": "ONTAR_Hisab (অন্তর হিসাব) - মুদির দোকানের দৈনিক হিসাব, স্টক ও বাকি খাতা।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
