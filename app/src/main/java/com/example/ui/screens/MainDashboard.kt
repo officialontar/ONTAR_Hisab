@@ -4,6 +4,10 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
+import coil.compose.AsyncImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +42,22 @@ fun MainDashboard(viewModel: AppViewModel) {
     val isDark by viewModel.isDarkMode.collectAsState()
     val user by viewModel.currentUser.collectAsState()
 
+    // PIN change dialogue variables
+    var showChangePinDialog by remember { mutableStateOf(false) }
+    var currentOldPinInput by remember { mutableStateOf("") }
+    var currentNewPinInput by remember { mutableStateOf("") }
+    var currentConfirmPinInput by remember { mutableStateOf("") }
+
+    // Profile Update Dialogue Variables
+    var showProfileSettingsDialog by remember { mutableStateOf(false) }
+    var editShopName by remember(user) { mutableStateOf(user?.shopName ?: "") }
+    var editOwnerName by remember(user) { mutableStateOf(user?.ownerName ?: "") }
+    var editPhone by remember(user) { mutableStateOf(user?.phone ?: "") }
+    var editEmail by remember(user) { mutableStateOf(user?.email ?: "") }
+    var editPin by remember(user) { mutableStateOf(user?.passwordHash ?: "") }
+    var editShopPicture by remember(user) { mutableStateOf(user?.shopPicture ?: "") }
+    var editOwnerPicture by remember(user) { mutableStateOf(user?.profilePicture ?: "") }
+
     // Financial Metrics Flows
     val itemsFlow by viewModel.stockItems.collectAsState()
     val customersFlow by viewModel.customers.collectAsState()
@@ -46,6 +66,446 @@ fun MainDashboard(viewModel: AppViewModel) {
     val isSyncing by viewModel.isCloudSyncing.collectAsState()
 
     val colors = MaterialTheme.colorScheme
+
+    // Security Dialogue Card
+    if (showChangePinDialog) {
+        AlertDialog(
+            onDismissRequest = { showChangePinDialog = false },
+            title = {
+                Text(
+                    text = Translator.get("security_settings", isBn),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (isBn) "নিরাপদ লেনদেনের জন্য ওল্ড পিন, নিউ পিন এবং কনফার্ম পিন সরবরাহ করে আপনার পিন কোড পরিবর্তন করুন।" else "Provide old PIN, new PIN, and confirmation secure PIN to update your security settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurface.copy(alpha = 0.6f)
+                    )
+                    
+                    OutlinedTextField(
+                        value = currentOldPinInput,
+                        onValueChange = { if (it.length <= 6) currentOldPinInput = it },
+                        label = { Text(Translator.get("old_pin_label", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = currentNewPinInput,
+                        onValueChange = { if (it.length <= 6) currentNewPinInput = it },
+                        label = { Text(Translator.get("new_pin_label", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = currentConfirmPinInput,
+                        onValueChange = { if (it.length <= 6) currentConfirmPinInput = it },
+                        label = { Text(Translator.get("confirm_pin_label", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.changeUserPassword(
+                            currentOldPinInput,
+                            currentNewPinInput,
+                            currentConfirmPinInput
+                        )
+                        showChangePinDialog = false
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = Translator.get("change_pin_btn", isBn),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showChangePinDialog = false
+                    }
+                ) {
+                    Text(text = if (isBn) "বাতিল" else "Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = colors.surface
+        )
+    }
+
+    // Profile settings edit Dialogue Card
+    if (showProfileSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showProfileSettingsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = Translator.get("edit_profile_dialog", isBn),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.primary
+                    )
+                }
+            },
+            text = {
+                val dialogScrollState = rememberScrollState()
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(dialogScrollState)
+                ) {
+                    // Quick Visual Previews
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Owner avatar preview
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isBn) "মালিকের ছবি" else "Owner Preview",
+                                fontSize = 11.sp,
+                                color = colors.onSurface.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (!editOwnerPicture.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = editOwnerPicture,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, colors.primary, CircleShape)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.primary.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Shop cover preview
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isBn) "দোকানের ছবি" else "Shop Preview",
+                                fontSize = 11.sp,
+                                color = colors.onSurface.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (!editShopPicture.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = editShopPicture,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(colors.primary.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Home,
+                                        contentDescription = null,
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Shop Name Input
+                    OutlinedTextField(
+                        value = editShopName,
+                        onValueChange = { editShopName = it },
+                        label = { Text(Translator.get("shop_name", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Home, null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Owner Name Input
+                    OutlinedTextField(
+                        value = editOwnerName,
+                        onValueChange = { editOwnerName = it },
+                        label = { Text(Translator.get("owner_name", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Phone Number Input
+                    OutlinedTextField(
+                        value = editPhone,
+                        onValueChange = { editPhone = it },
+                        label = { Text(Translator.get("phone_number", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Phone, null) },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Email Display (Read-Only)
+                    OutlinedTextField(
+                        value = editEmail,
+                        onValueChange = {},
+                        label = { Text(Translator.get("login_email", isBn) + " (Read-Only)") },
+                        leadingIcon = { Icon(Icons.Default.Email, null) },
+                        singleLine = true,
+                        enabled = false,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledBorderColor = colors.onSurface.copy(alpha = 0.2f),
+                            disabledTextColor = colors.onSurface.copy(alpha = 0.6f)
+                        )
+                    )
+
+                    // Security PIN password
+                    OutlinedTextField(
+                        value = editPin,
+                        onValueChange = { if (it.length <= 6) editPin = it },
+                        label = { Text(Translator.get("register_pin", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Preset Shop Picture picker inside Profile Details
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = Translator.get("preset_avatars", isBn) + " - " + Translator.get("shop_pic", isBn),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Preset 1
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editShopPicture == "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable {
+                                            editShopPicture = "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = Translator.get("shop_pic_placeholder", isBn),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                }
+                                // Preset 2
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editShopPicture == "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable {
+                                            editShopPicture = "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80"
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = Translator.get("shop_pic_placeholder2", isBn),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = editShopPicture,
+                        onValueChange = { editShopPicture = it },
+                        label = { Text(Translator.get("shop_pic", isBn)) },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Preset Owner Picture picker inside Profile Details
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = Translator.get("preset_avatars", isBn) + " - " + Translator.get("owner_pic", isBn),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Preset 1
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editOwnerPicture == "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable {
+                                            editOwnerPicture = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = Translator.get("owner_pic_placeholder", isBn),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                }
+                                // Preset 2
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editOwnerPicture == "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable {
+                                            editOwnerPicture = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80"
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = Translator.get("owner_pic_placeholder2", isBn),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = editOwnerPicture,
+                        onValueChange = { editOwnerPicture = it },
+                        label = { Text(Translator.get("owner_pic", isBn)) },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateUserProfile(
+                            shopName = editShopName,
+                            ownerName = editOwnerName,
+                            email = editEmail,
+                            phone = editPhone,
+                            pin = editPin,
+                            profilePic = editOwnerPicture.ifBlank { null },
+                            shopPic = editShopPicture.ifBlank { null }
+                        )
+                        showProfileSettingsDialog = false
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = Translator.get("update_btn", isBn),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showProfileSettingsDialog = false
+                    }
+                ) {
+                    Text(text = if (isBn) "বাতিল" else "Cancel")
+                }
+            },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = colors.surface
+        )
+    }
 
     // Calculations
     val totalSales = transactionsFlow.filter { it.type == "SALE" }.sumOf { it.amount }
@@ -69,20 +529,70 @@ fun MainDashboard(viewModel: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isBn) "শুভ দিন" else "Welcome,",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onBackground.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = user?.shopName ?: Translator.get("app_title", isBn),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colors.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    // Interactive Profile Area
+                    Row(
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                showProfileSettingsDialog = true
+                            }
+                            .padding(4.dp)
+                            .testTag("profile_header_block"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Profile Image / Icon
+                        val ownerPic = user?.profilePicture
+                        if (!ownerPic.isNullOrBlank()) {
+                            AsyncImage(
+                                model = ownerPic,
+                                contentDescription = "Profile Pic",
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .border(1.5.dp, colors.primary, CircleShape)
+                            )
+                        } else {
+                            // Default beautiful placeholder
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.primary.copy(alpha = 0.15f))
+                                    .border(1.5.dp, colors.primary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = (user?.ownerName?.take(1) ?: "U").uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Column {
+                            val shopTitle = user?.shopName ?: Translator.get("app_title", isBn)
+                            val ownerTitle = user?.ownerName ?: (if (isBn) "দোকানের মালিক" else "Shop Owner")
+                            Text(
+                                text = ownerTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = shopTitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     // Headers action
@@ -150,6 +660,30 @@ fun MainDashboard(viewModel: AppViewModel) {
 
                         Spacer(modifier = Modifier.width(6.dp))
 
+                        // Security / Change PIN Settings
+                        IconButton(
+                            onClick = {
+                                currentOldPinInput = ""
+                                currentNewPinInput = ""
+                                currentConfirmPinInput = ""
+                                showChangePinDialog = true
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.primary.copy(alpha = 0.1f))
+                                .testTag("security_settings_icon_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
                         // Quit
                         IconButton(
                             onClick = { viewModel.logout() },
@@ -179,6 +713,61 @@ fun MainDashboard(viewModel: AppViewModel) {
         ) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Beautiful Shop Picture Header Banner Card
+                val shopPic = user?.shopPicture
+                if (!shopPic.isNullOrBlank()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = shopPic,
+                                contentDescription = "Shop Front Banner",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                            // A subtle premium gradient overlay to make text pop
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.65f)
+                                            )
+                                        )
+                                    )
+                            )
+                            // Text on banner
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = user?.shopName ?: "",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = user?.phone ?: "",
+                                    color = Color.White.copy(alpha = 0.82f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Premium Financial Gradient Summary Card
                 Card(

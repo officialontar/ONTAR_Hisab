@@ -77,7 +77,26 @@ object Translator {
         "expense_title" to "খরচের খাত (যেমন: বিদ্যুৎ বিল)",
         "log_out" to "লগআউট",
         "premium_badge" to "প্রিমিয়াম সুবিধা",
-        "ai_coach_desc" to "আপনার দোকান বিক্রি এবং খরচের হিসাব বিশ্লেষণ করে ফিনান্সিয়াল রিপোর্ট ও এআই ড্যাশবোর্ড আপডেট।"
+        "ai_coach_desc" to "আপনার দোকান বিক্রি এবং খরচের হিসাব বিশ্লেষণ করে ফিনান্সিয়াল রিপোর্ট ও এআই ড্যাশবোর্ড আপডেট।" ,
+        "owner_name" to "দোকানদারের পুরো নাম",
+        "forget_pin" to "পিন ভুলে গেছেন?",
+        "reset_pin_title" to "পিন উদ্ধার (ফরগেট পাসওয়ার্ড)",
+        "enter_sim_otp" to "৪ সংখরের ওটিপি (সিমুলেশন: %s)",
+        "verify_otp" to "ওটিপি ও পিন পরিবর্তন করুন",
+        "new_pin_label" to "নতুন পিন কোড (৪ সংখ্যা)",
+        "old_pin_label" to "বর্তমান পিন কোড",
+        "confirm_pin_label" to "কমফার্ম নতুন পিন",
+        "change_pin_btn" to "পিন পরিবর্তন করুন",
+        "security_settings" to "পিন পরিবর্তন করুন (Settings)",
+        "shop_pic" to "দোকানের ছবি (Image URL/URI)",
+        "owner_pic" to "দোকানদারের প্রোফাইল ছবি (Image URL/URI)",
+        "edit_profile_dialog" to "প্রোফাইল আপডেট করুন",
+        "update_btn" to "আপডেট তথ্য",
+        "preset_avatars" to "সুন্দর ডেমো ছবি নির্বাচন করুন",
+        "shop_pic_placeholder" to "দোকান ছবি ১",
+        "shop_pic_placeholder2" to "দোকান ছবি ২",
+        "owner_pic_placeholder" to "মালিক ছবি ১",
+        "owner_pic_placeholder2" to "মালিক ছবি ২"
     )
 
     private val enMap = mapOf(
@@ -156,7 +175,26 @@ object Translator {
         "expense_title" to "Expense Reason (e.g. Electric bill)",
         "log_out" to "Log Out",
         "premium_badge" to "Premium Active",
-        "ai_coach_desc" to "Analyses actual shop transactions, stocks and expenses to draft professional forecasts and strategies easily."
+        "ai_coach_desc" to "Analyses actual shop transactions, stocks and expenses to draft professional forecasts and strategies easily.",
+        "owner_name" to "Shop Owner Full Name",
+        "forget_pin" to "Forgot PIN?",
+        "reset_pin_title" to "Recover Secure PIN (Forgot PIN)",
+        "enter_sim_otp" to "4-Digit OTP (Simulated: %s)",
+        "verify_otp" to "Verify OTP & Update PIN",
+        "new_pin_label" to "New PIN Code (4 Digits)",
+        "old_pin_label" to "Current Security PIN",
+        "confirm_pin_label" to "Confirm New PIN",
+        "change_pin_btn" to "Update Password PIN",
+        "security_settings" to "Change Safety PIN (Settings)",
+        "shop_pic" to "Shop Image (URL/URI)",
+        "owner_pic" to "Owner Profile Pic (URL/URI)",
+        "edit_profile_dialog" to "Update Profile Details",
+        "update_btn" to "Update Profile",
+        "preset_avatars" to "Select Beautiful Shop/Owner Visuals",
+        "shop_pic_placeholder" to "Shop Pic 1",
+        "shop_pic_placeholder2" to "Shop Pic 2",
+        "owner_pic_placeholder" to "Owner Pic 1",
+        "owner_pic_placeholder2" to "Owner Pic 2"
     )
 
     fun get(key: String, isBengali: Boolean): String {

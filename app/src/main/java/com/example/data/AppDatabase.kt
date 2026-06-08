@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         Dealer::class,
         TransactionRecord::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

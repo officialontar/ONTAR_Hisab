@@ -10,7 +10,9 @@ data class User(
     val shopName: String,
     val phone: String,
     val passwordHash: String,
-    val profilePicture: String? = null
+    val profilePicture: String? = null,
+    val ownerName: String? = null,
+    val shopPicture: String? = null
 ) : Serializable
 
 @Entity(tableName = "stock_items")

@@ -58,6 +58,49 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         _authStateMessage.value = null
     }
 
+    // Forget Password Recovery States
+    private val _resetOtp = MutableStateFlow<String?>(null)
+    val resetOtp: StateFlow<String?> = _resetOtp.asStateFlow()
+    
+    private val _resetUser = MutableStateFlow<User?>(null)
+    val resetUser: StateFlow<User?> = _resetUser.asStateFlow()
+
+    private val _forgetPasswordStep = MutableStateFlow<Int>(0) // 0 = default login/reg, 1 = input phone/email, 2 = verify OTP & change PIN
+    val forgetPasswordStep: StateFlow<Int> = _forgetPasswordStep.asStateFlow()
+    
+    fun setForgetPasswordStep(step: Int) {
+        _forgetPasswordStep.value = step
+        if (step == 0) {
+            _resetOtp.value = null
+            _resetUser.value = null
+            _authStateMessage.value = null
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            _currentUser.collect { user ->
+                if (user != null) {
+                    triggerCloudSync(isManual = false)
+                }
+            }
+        }
+
+        // Periodic Cloud Sync Loop: Automatically sync every 30 seconds
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30000)
+                if (_currentUser.value != null && !_isCloudSyncing.value) {
+                    try {
+                        triggerCloudSync(isManual = false)
+                    } catch (e: Exception) {
+                        Log.e("AppViewModel", "Periodic background sync failed", e)
+                    }
+                }
+            }
+        }
+    }
+
     // Reactive Flows of Grocery store database
     val stockItems: StateFlow<List<StockItem>> = _currentUser
         .flatMapLatest { user ->
@@ -122,19 +165,185 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _isCloudSyncing = MutableStateFlow(false)
     val isCloudSyncing: StateFlow<Boolean> = _isCloudSyncing.asStateFlow()
 
-    fun triggerCloudSync() {
-        viewModelScope.launch {
+    fun triggerCloudSync(isManual: Boolean = true) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
             _isCloudSyncing.value = true
-            showToast(if (_isBengali.value) "ক্লাউড সিঙ্ক্রোনাইজেশন শুরু হয়েছে..." else "Cloud synchronization started...")
-            kotlinx.coroutines.delay(2000)
-            _isCloudSyncing.value = false
-            showToast(if (_isBengali.value) "সার্ভারের সাথে ডেটা সফলভাবে সিঙ্ক হয়েছে!" else "Data successfully synchronized with the cloud!")
+            if (isManual) {
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "সার্ভারের সাথে সিঙ্ক শুরু হয়েছে..." else "Cloud sync started...")
+                }
+            }
+
+            try {
+                // 1. Download payload from Cloud
+                val remotePayload = com.example.api.CloudSyncEngine.downloadPayload(user.email)
+                
+                // 2. Prepare local sets
+                val localStock = stockItems.value
+                val localCustomers = customers.value
+                val localDealers = dealers.value
+                val localTx = transactions.value
+
+                if (remotePayload != null) {
+                    // --- MERGING STOCK ITEMS ---
+                    val allStockNames = (localStock.map { it.name } + remotePayload.stockItems.map { it.name }).distinct()
+                    for (name in allStockNames) {
+                        val localItem = localStock.find { it.name == name }
+                        val remoteItem = remotePayload.stockItems.find { it.name == name }
+                        if (localItem != null && remoteItem != null) {
+                            // Sync remote values to local to keep devices matching
+                            val updated = localItem.copy(
+                                purchasePrice = remoteItem.purchasePrice,
+                                salesPrice = remoteItem.salesPrice,
+                                stockCount = remoteItem.stockCount,
+                                category = remoteItem.category,
+                                unit = remoteItem.unit
+                            )
+                            repository.updateStockItem(updated)
+                        } else if (remoteItem != null) {
+                            // Insert remote item to local DB
+                            val newItem = remoteItem.copy(id = 0, userEmail = user.email)
+                            repository.insertStockItem(newItem)
+                        }
+                    }
+
+                    // --- MERGING CUSTOMERS ---
+                    val remoteCustomerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
+                    val activeLocalCustomers = repository.getCustomers(user.email).firstOrNull() ?: localCustomers
+
+                    for (remoteCust in remotePayload.customers) {
+                        val matchingLocal = activeLocalCustomers.find { 
+                            it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
+                            it.phone.trim() == remoteCust.phone.trim() 
+                        }
+                        if (matchingLocal != null) {
+                            val updated = matchingLocal.copy(
+                                address = remoteCust.address ?: matchingLocal.address,
+                                totalDue = remoteCust.totalDue,
+                                photoUri = remoteCust.photoUri ?: matchingLocal.photoUri
+                            )
+                            repository.updateCustomer(updated)
+                            remoteCustomerMap[remoteCust.id] = updated.id
+                        } else {
+                            val newCust = remoteCust.copy(id = 0, userEmail = user.email)
+                            repository.insertCustomer(newCust)
+                            val freshLocalList = repository.getCustomers(user.email).firstOrNull() ?: emptyList()
+                            val insertedLocal = freshLocalList.find { 
+                                it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
+                                it.phone.trim() == remoteCust.phone.trim() 
+                            }
+                            if (insertedLocal != null) {
+                                remoteCustomerMap[remoteCust.id] = insertedLocal.id
+                            }
+                        }
+                    }
+
+                    // --- MERGING DEALERS ---
+                    val remoteDealerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
+                    val activeLocalDealers = repository.getDealers(user.email).firstOrNull() ?: localDealers
+
+                    for (remoteDlr in remotePayload.dealers) {
+                        val matchingLocal = activeLocalDealers.find {
+                            it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
+                            it.phone.trim() == remoteDlr.phone.trim()
+                        }
+                        if (matchingLocal != null) {
+                            val updated = matchingLocal.copy(
+                                company = remoteDlr.company ?: matchingLocal.company,
+                                totalOwed = remoteDlr.totalOwed,
+                                photoUri = remoteDlr.photoUri ?: matchingLocal.photoUri
+                            )
+                            repository.updateDealer(updated)
+                            remoteDealerMap[remoteDlr.id] = updated.id
+                        } else {
+                            val newDlr = remoteDlr.copy(id = 0, userEmail = user.email)
+                            repository.insertDealer(newDlr)
+                            val freshLocalList = repository.getDealers(user.email).firstOrNull() ?: emptyList()
+                            val insertedLocal = freshLocalList.find {
+                                it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
+                                it.phone.trim() == remoteDlr.phone.trim()
+                            }
+                            if (insertedLocal != null) {
+                                remoteDealerMap[remoteDlr.id] = insertedLocal.id
+                            }
+                        }
+                    }
+
+                    // --- MERGING TRANSACTIONS ---
+                    val activeLocalTx = repository.getTransactions(user.email).firstOrNull() ?: localTx
+                    for (remoteT in remotePayload.transactions) {
+                        val existsLocally = activeLocalTx.any {
+                            it.title == remoteT.title &&
+                            java.lang.Math.abs(it.amount - remoteT.amount) < 0.01 &&
+                            it.type == remoteT.type &&
+                            it.timestamp == remoteT.timestamp
+                        }
+                        if (!existsLocally) {
+                            val localCustId = remoteT.customerId?.let { remoteCustomerMap[it] }
+                            val localDlrId = remoteT.dealerId?.let { remoteDealerMap[it] }
+
+                            val newTx = remoteT.copy(
+                                id = 0,
+                                userEmail = user.email,
+                                customerId = localCustId,
+                                dealerId = localDlrId
+                            )
+                            repository.insertTransaction(newTx)
+                        }
+                    }
+                }
+
+                // 3. Upload latest consolidated merged local database back to Cloud
+                val finalStock = repository.getStockItems(user.email).firstOrNull() ?: emptyList()
+                val finalCustomers = repository.getCustomers(user.email).firstOrNull() ?: emptyList()
+                val finalDealers = repository.getDealers(user.email).firstOrNull() ?: emptyList()
+                val finalTx = repository.getTransactions(user.email).firstOrNull() ?: emptyList()
+
+                val uploadPayload = com.example.api.SyncPayload(
+                    user = user,
+                    stockItems = finalStock,
+                    customers = finalCustomers,
+                    dealers = finalDealers,
+                    transactions = finalTx,
+                    timestamp = System.currentTimeMillis()
+                )
+
+                val uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(user.email, uploadPayload)
+
+                withContext(Dispatchers.Main) {
+                    _isCloudSyncing.value = false
+                    if (isManual) {
+                        if (uploadSuccess) {
+                            showToast(if (_isBengali.value) "সার্ভারের সাথে সফলভাবে সিঙ্ক সম্পন্ন হয়েছে!" else "Data synchronized with server successfully!")
+                        } else {
+                            showToast(if (_isBengali.value) "সিঙ্ক আংশিক সম্পন্ন (ক্লাউড সংযোগ ত্রুটি)" else "Sync partially completed (could not upload changes)")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Cloud sync exception", e)
+                withContext(Dispatchers.Main) {
+                    _isCloudSyncing.value = false
+                    if (isManual) {
+                        showToast(if (_isBengali.value) "সিঙ্ক ব্যর্থ: ইন্টারনেট সংযোগ নেই" else "Sync failed: network connection error")
+                    }
+                }
+            }
         }
     }
 
     // --- USER REGISTRATION & LOGIN ---
-    fun registerNewUser(shopName: String, email: String, phone: String, pin: String) {
-        if (shopName.isBlank() || email.isBlank() || phone.isBlank() || pin.isBlank()) {
+    fun registerNewUser(
+        shopName: String,
+        ownerName: String,
+        email: String,
+        phone: String,
+        pin: String,
+        profilePic: String? = null,
+        shopPic: String? = null
+    ) {
+        if (shopName.isBlank() || ownerName.isBlank() || email.isBlank() || phone.isBlank() || pin.isBlank()) {
             _authStateMessage.value = if (_isBengali.value) "দয়া করে সকল তথ্য পূরণ করুন" else "Please fill up all details"
             return
         }
@@ -150,7 +359,10 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     email = email.trim(),
                     shopName = shopName.trim(),
                     phone = phone.trim(),
-                    passwordHash = pin.trim() // store simply for offline/local flow
+                    passwordHash = pin.trim(), // store simply for offline/local flow
+                    ownerName = ownerName.trim(),
+                    profilePicture = profilePic,
+                    shopPicture = shopPic
                 )
                 repository.registerUser(newUser)
                 _currentUser.value = newUser
@@ -165,6 +377,212 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         }
     }
 
+    fun updateUserProfile(
+        shopName: String,
+        ownerName: String,
+        email: String,
+        phone: String,
+        pin: String,
+        profilePic: String?,
+        shopPic: String?
+    ) {
+        if (shopName.isBlank() || ownerName.isBlank() || email.isBlank() || phone.isBlank() || pin.isBlank()) {
+            showToast(if (_isBengali.value) "দয়া করে সমস্ত তথ্য পূরণ করুন" else "Please complete all details")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val updatedUser = User(
+                    email = email.trim(),
+                    shopName = shopName.trim(),
+                    phone = phone.trim(),
+                    passwordHash = pin.trim(),
+                    profilePicture = profilePic,
+                    ownerName = ownerName.trim(),
+                    shopPicture = shopPic
+                )
+                repository.updateUser(updatedUser)
+                _currentUser.value = updatedUser
+
+                // Sync updated user to Cloud Sync bucket
+                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(email.trim())
+                val newPayload = if (cloudPayload != null) {
+                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
+                } else {
+                    com.example.api.SyncPayload(
+                        user = updatedUser,
+                        stockItems = emptyList(),
+                        customers = emptyList(),
+                        dealers = emptyList(),
+                        transactions = emptyList(),
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+                com.example.api.CloudSyncEngine.uploadPayload(email.trim(), newPayload)
+
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "প্রোফাইল সফলভাবে আপডেট ও সিন্ক্রোনাইজ করা হয়েছে!" else "Profile updated and synchronized successfully!")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Profile update error", e)
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "স্থানীয়ভাবে সেভ হয়েছে কিন্তু ক্লাউড আপডেট ব্যর্থ হয়েছে" else "Saved locally but cloud update failed")
+                }
+            }
+        }
+    }
+
+    fun sendResetOtp(emailOrPhone: String) {
+        if (emailOrPhone.isBlank()) {
+            _authStateMessage.value = if (_isBengali.value) "দয়া করে ইমেইল বা মোবাইল নাম্বার লিখুন" else "Please enter email or mobile number"
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                var user = repository.getUserByIdentifier(emailOrPhone.trim())
+                if (user == null) {
+                    // Pull from cloud in case it's on/off syncing
+                    val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(emailOrPhone.trim())
+                    if (cloudPayload != null) {
+                        user = cloudPayload.user
+                    }
+                }
+                
+                if (user == null) {
+                    _authStateMessage.value = if (_isBengali.value) "এই ইমেইল/মোবাইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি" else "No account found with this email/mobile"
+                    return@launch
+                }
+                
+                // Generate a random 4 digit numeric OTP
+                val generatedOtp = (1000..9999).random().toString()
+                _resetOtp.value = generatedOtp
+                _resetUser.value = user
+                _forgetPasswordStep.value = 2 // Transition to step 2: Enter OTP
+                _authStateMessage.value = null
+                
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "ইমেইল ও মোবাইলে ওটিপি পাঠানো হয়েছে!" else "OTP code dispatched to your email and phone!")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Forgot OTP logic exception", e)
+                _authStateMessage.value = e.message ?: "Error sending OTP"
+            }
+        }
+    }
+
+    fun verifyOtpAndResetPin(otpInput: String, newPin: String) {
+        val otpValue = _resetOtp.value
+        val userItem = _resetUser.value
+        
+        if (otpValue == null || userItem == null) {
+            _authStateMessage.value = if (_isBengali.value) "সেশন শেষ হয়ে গেছে, আবার নতুন করে করুন" else "Session expired. Provide email/mobile again"
+            return
+        }
+        if (otpInput.trim() != otpValue) {
+            _authStateMessage.value = if (_isBengali.value) "ভুল ওটিপি কোড! পুনরায় টাইপ করুন" else "Invalid OTP! Type correctly"
+            return
+        }
+        if (newPin.trim().length < 4) {
+            _authStateMessage.value = if (_isBengali.value) "নতুন পিন কোড ৪ সংখ্যার হতে হবে" else "New PIN code must be at least 4 digits"
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val updatedUser = userItem.copy(passwordHash = newPin.trim())
+                
+                // Save/update locally
+                val localUserCheck = repository.getUser(userItem.email)
+                if (localUserCheck == null) {
+                    repository.registerUser(updatedUser)
+                } else {
+                    repository.updateUser(updatedUser)
+                }
+                
+                // Push updated password and existing datasets securely to CloudSync
+                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(userItem.email)
+                val newPayload = if (cloudPayload != null) {
+                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
+                } else {
+                    com.example.api.SyncPayload(
+                        user = updatedUser,
+                        stockItems = emptyList(),
+                        customers = emptyList(),
+                        dealers = emptyList(),
+                        transactions = emptyList(),
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+                com.example.api.CloudSyncEngine.uploadPayload(userItem.email, newPayload)
+                
+                // Set active user and nav to dashboard
+                _currentUser.value = updatedUser
+                _forgetPasswordStep.value = 0
+                _currentScreen.value = "DASHBOARD"
+                _authStateMessage.value = null
+                
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "পিন কোড উদ্ধার সফল হয়েছে!" else "PIN recovered and changed successfully!")
+                }
+            } catch (e: Exception) {
+                _authStateMessage.value = e.message ?: "Failed to reset password"
+            }
+        }
+    }
+
+    fun changeUserPassword(oldPin: String, newPin: String, confirmPin: String) {
+        val userItem = _currentUser.value
+        if (userItem == null) {
+            showToast(if (_isBengali.value) "দুঃখিত, কোনো ইউজার সেশন রানিং নেই" else "No user session found")
+            return
+        }
+        if (oldPin.trim() != userItem.passwordHash) {
+            showToast(if (_isBengali.value) "বর্তমান পিন কোডটি সঠিক ছিল না!" else "Current PIN description is incorrect!")
+            return
+        }
+        if (newPin.trim().length < 4) {
+            showToast(if (_isBengali.value) "নতুন পিন অবশ্যই ৪ সংখ্যার হতে হবে!" else "New PIN code must be at least 4 digits long!")
+            return
+        }
+        if (newPin.trim() != confirmPin.trim()) {
+            showToast(if (_isBengali.value) "নতুন পিন কোডগুলো সঠিকভাবে মেলানো যায়নি!" else "New PIN and Confirmation PIN do not match!")
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val updatedUser = userItem.copy(passwordHash = newPin.trim())
+                repository.updateUser(updatedUser)
+                _currentUser.value = updatedUser
+                
+                // Sync updated password to Cloud
+                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(userItem.email)
+                val newPayload = if (cloudPayload != null) {
+                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
+                } else {
+                    com.example.api.SyncPayload(
+                        user = updatedUser,
+                        stockItems = emptyList(),
+                        customers = emptyList(),
+                        dealers = emptyList(),
+                        transactions = emptyList(),
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+                com.example.api.CloudSyncEngine.uploadPayload(userItem.email, newPayload)
+                
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "পিনকোড সফলভাবে পরিবর্তন এবং সিঙ্ক করা হয়েছে!" else "PIN updated and synced to server successfully!")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Password update error", e)
+                withContext(Dispatchers.Main) {
+                    showToast(if (_isBengali.value) "পিনকোড স্থানীয়ভাবে পরিবর্তন হয়েছে কিন্তু সার্ভারে সিঙ্ক ব্যর্থ" else "PIN changed locally, cloud synchronization failed")
+                }
+            }
+        }
+    }
+
     fun loginUser(identifier: String, pin: String) {
         if (identifier.isBlank() || pin.isBlank()) {
             _authStateMessage.value = if (_isBengali.value) "ইমেইল/মোবাইল এবং পিন ইনপুট দিন" else "Provide email/phone and pin details"
@@ -173,14 +591,77 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val user = repository.getUserByIdentifier(identifier.trim())
+                var user = repository.getUserByIdentifier(identifier.trim())
+                
+                // Try to load from cloud if user is null or doesn't match pin locally
+                if (user == null || user.passwordHash != pin.trim()) {
+                    val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(identifier.trim())
+                    if (cloudPayload != null) {
+                        val cloudUser = cloudPayload.user
+                        if (cloudUser.passwordHash == pin.trim()) {
+                            // PIN matches! Save user and download entire dataset to local DB
+                            if (user == null) {
+                                repository.registerUser(cloudUser)
+                            } else {
+                                repository.updateUser(cloudUser)
+                            }
+                            
+                            // Insert/sync all datasets
+                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0)) }
+                            
+                            val localCustomerMap = mutableMapOf<Int, Int>()
+                            cloudPayload.customers.forEach { cust ->
+                                repository.insertCustomer(cust.copy(id = 0))
+                            }
+                            val freshCustomers = repository.getCustomers(cloudUser.email).firstOrNull() ?: emptyList()
+                            cloudPayload.customers.forEach { remoteC ->
+                                val matchingL = freshCustomers.find { 
+                                    it.name.trim().lowercase() == remoteC.name.trim().lowercase() && 
+                                    it.phone.trim() == remoteC.phone.trim() 
+                                }
+                                if (matchingL != null) {
+                                    localCustomerMap[remoteC.id] = matchingL.id
+                                }
+                            }
+
+                            val localDealerMap = mutableMapOf<Int, Int>()
+                            cloudPayload.dealers.forEach { dlr ->
+                                repository.insertDealer(dlr.copy(id = 0))
+                            }
+                            val freshDealers = repository.getDealers(cloudUser.email).firstOrNull() ?: emptyList()
+                            cloudPayload.dealers.forEach { remoteD ->
+                                val matchingL = freshDealers.find {
+                                    it.name.trim().lowercase() == remoteD.name.trim().lowercase() &&
+                                    it.phone.trim() == remoteD.phone.trim()
+                                }
+                                if (matchingL != null) {
+                                    localDealerMap[remoteD.id] = matchingL.id
+                                }
+                            }
+
+                            cloudPayload.transactions.forEach { tx ->
+                                val localCustId = tx.customerId?.let { localCustomerMap[it] }
+                                val localDlrId = tx.dealerId?.let { localDealerMap[it] }
+                                repository.insertTransaction(tx.copy(id = 0, customerId = localCustId, dealerId = localDlrId))
+                            }
+
+                            user = cloudUser
+                        }
+                    }
+                }
+
                 if (user == null || user.passwordHash != pin.trim()) {
                     _authStateMessage.value = if (_isBengali.value) "ভুল ইমেইল/মোবাইল অথবা পিন!" else "Incorrect login details or pin!"
                     return@launch
                 }
+                
                 _currentUser.value = user
                 _currentScreen.value = "DASHBOARD"
                 _authStateMessage.value = null
+
+                // Fire a background sync to fetch any latest updates
+                triggerCloudSync(isManual = false)
+
                 withContext(Dispatchers.Main) {
                     val welcomeMsg = if (_isBengali.value) {
                         "${user.shopName} (আইডি: ${user.phone}) লগইন সফল হয়েছে!"
@@ -190,6 +671,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     showToast(welcomeMsg)
                 }
             } catch (e: Exception) {
+                Log.e("AppViewModel", "Login error", e)
                 _authStateMessage.value = e.message ?: "Authentication error"
             }
         }
@@ -202,7 +684,14 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun seedDemoData() {
         val email = "demo@example.com"
-        val userItem = User(email, "মেসার্স অনিক স্টোর (অনুমোদিত ডেমো)", "01712345678", "1234")
+        val userItem = User(
+            email = email,
+            shopName = "মেসার্স অনিক স্টোর (অনুমোদিত ডেমো)",
+            phone = "01712345678",
+            passwordHash = "1234",
+            profilePicture = null,
+            ownerName = "মেসার্স অনিক"
+        )
         _currentUser.value = userItem
         _currentScreen.value = "DASHBOARD"
         _authStateMessage.value = null
@@ -287,6 +776,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 unit = unit
             )
             repository.insertStockItem(item)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "পণ্য স্টক করা হয়েছে!" else "Product stock added!")
             }
@@ -297,6 +787,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = item.copy(stockCount = newCount)
             repository.updateStockItem(updated)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "স্টক আপডেট করা হয়েছে!" else "Stock quantity updated!")
             }
@@ -306,6 +797,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     fun deleteStockItem(item: StockItem) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteStockItem(item)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "পণ্য সরানো হয়েছে!" else "Product removed from stock!")
             }
@@ -328,6 +820,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 imageResName = photoUri
             )
             repository.updateStockItem(updated)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "পণ্য তথ্য আপডেট করা হয়েছে!" else "Product updated successfully!")
             }
@@ -379,6 +872,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "বিক্রি সম্পূর্ণ হয়েছে!" else "Sale completed!")
             }
+            triggerCloudSync(isManual = false)
         }
     }
 
@@ -397,6 +891,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 description = note
             )
             repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "খরচ লিপিবদ্ধ করা হয়েছে" else "Expense recorded successfully")
             }
@@ -418,6 +913,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 photoUri = photoUri
             )
             repository.insertCustomer(customer)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "নতুন কাস্টমার যোগ করা হয়েছে!" else "New customer added!")
             }
@@ -615,7 +1111,6 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         _aiReportText.value = null
 
         viewModelScope.launch {
-            // Collate simplified shop summary
             val currentItems = stockItems.value
             val currentTxs = transactions.value
             val totalSales = currentTxs.filter { it.type == "SALE" }.sumOf { it.amount }
@@ -686,32 +1181,35 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
         val shopName = _currentUser.value?.shopName ?: "দোকান"
         val shopPhone = _currentUser.value?.phone ?: ""
-
+        val ownerName = _currentUser.value?.ownerName ?: ""
+ 
         val locationText = if (!address.isNullOrBlank()) " ($address)" else ""
         val isAdvance = totalDue < 0
         val displayAmount = if (isAdvance) java.lang.Math.abs(totalDue) else totalDue
+        val ownerLineBn = if (ownerName.isNotBlank()) "\nদোকানদারের পুরো নাম: $ownerName" else ""
+        val ownerLineEn = if (ownerName.isNotBlank()) "\nShopkeeper: $ownerName" else ""
 
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             // Local fallback due message writer if key is not set
             _draftedDueMsg.value = if (_isBengali.value) {
                 if (isAdvance) {
-                    "প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone"
+                    "প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
                 } else {
-                    "প্রিয় $customerName$locationText, $shopName এ আপনার পূর্বে বাকি বকেয়া রয়েছে ৳$displayAmount। আপনার বকেয়া পরিশোধের জন্য বিনীত অনুরোধ করছি। যোগাযোগ: $shopPhone"
+                    "প্রিয় $customerName$locationText, $shopName এ আপনার পূর্বে বাকি বকেয়া রয়েছে ৳$displayAmount। আপনার বকেয়া পরিশোধের জন্য বিনীত অনুরোধ করছি। যোগাযোগ: $shopPhone$ownerLineBn"
                 }
             } else {
                 if (isAdvance) {
-                    "Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us! Contact: $shopPhone"
+                    "Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us! Contact: $shopPhone$ownerLineEn"
                 } else {
-                    "Dear $customerName$locationText, your unpaid due at $shopName is ৳$displayAmount. Kindly clear your dues. Contact: $shopPhone"
+                    "Dear $customerName$locationText, your unpaid due at $shopName is ৳$displayAmount. Kindly clear your dues. Contact: $shopPhone$ownerLineEn"
                 }
             }
             return
         }
-
+ 
         _isMsgDrafting.value = true
         _draftedDueMsg.value = null
-
+ 
         viewModelScope.launch {
             val prompt = if (_isBengali.value) {
                 if (isAdvance) {
@@ -722,8 +1220,9 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     অগ্রিম জমা পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
                     যোগাযোগের ফোন নাম্বার: $shopPhone
+                    দোকানদারের নাম: $ownerName
                     
-                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার সন্তুষ্ট হন। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার সন্তুষ্ট হন। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
                     """.trimIndent()
                 } else {
                     """
@@ -733,8 +1232,9 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     বাকি বকেয়া পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
                     যোগাযোগের ফোন নাম্বার: $shopPhone
+                    দোকানদারের নাম: $ownerName
                     
-                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার অসন্তুষ্ট না হন আর সহজে টাকা পরিশোধের কথা মনে করেন। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার অসন্তুষ্ট না হন আর সহজে টাকা পরিশোধের কথা মনে করেন। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
                     """.trimIndent()
                 }
             } else {
@@ -746,7 +1246,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     Advance Deposit amount: ৳$displayAmount
                     Shop Name: $shopName
                     Shop contact phone: $shopPhone
-                    Keep it short, professional, and sweet. Output only the SMS copy.
+                    Shopkeeper Name: $ownerName
+                    Keep it short, professional, and sweet. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
                     """.trimIndent()
                 } else {
                     """
@@ -756,11 +1257,12 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     Due amount: ৳$displayAmount
                     Shop Name: $shopName
                     Shop contact phone: $shopPhone
-                    Keep it sweet, welcoming, respectful, and direct. Output only the SMS copy.
+                    Shopkeeper Name: $ownerName
+                    Keep it sweet, welcoming, respectful, and direct. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
                     """.trimIndent()
                 }
             }
-
+ 
             try {
                 val request = GeminiRequest(
                     contents = listOf(Content(parts = listOf(Part(text = prompt)))),
@@ -772,15 +1274,15 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             } catch (e: Exception) {
                 _draftedDueMsg.value = if (_isBengali.value) {
                     if (isAdvance) {
-                        "প্রিয় $customerName, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone"
+                        "প্রিয় $customerName, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
                     } else {
-                        "প্রিয় $customerName, $shopName এ আপনার বকেয়া রয়েছে ৳$displayAmount। দয়া করে পরিশোধ করুন। যোগাযোগ: $shopPhone"
+                        "প্রিয় $customerName, $shopName এ আপনার বকেয়া রয়েছে ৳$displayAmount। দয়া করে পরিশোধ করুন। যোগাযোগ: $shopPhone$ownerLineBn"
                     }
                 } else {
                     if (isAdvance) {
-                        "Dear $customerName, you have an advance credit of ৳$displayAmount at $shopName. Thank you! Phone: $shopPhone"
+                        "Dear $customerName, you have an advance credit of ৳$displayAmount at $shopName. Thank you! Phone: $shopPhone$ownerLineEn"
                     } else {
-                        "Dear $customerName, your pending payment of ৳$displayAmount is due at $shopName. Please resolve. Phone: $shopPhone"
+                        "Dear $customerName, your pending payment of ৳$displayAmount is due at $shopName. Please resolve. Phone: $shopPhone$ownerLineEn"
                     }
                 }
             } finally {
