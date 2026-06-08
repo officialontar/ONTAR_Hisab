@@ -8,9 +8,21 @@ class AppRepository(private val appDao: AppDao) {
 
     suspend fun getUserByIdentifier(identifier: String): User? = appDao.getUserByIdentifier(identifier)
 
+    suspend fun getAllShopsOfUser(rootEmail: String): List<User> = appDao.getAllShopsOfUser(rootEmail)
+
     suspend fun registerUser(user: User) = appDao.registerUser(user)
 
     suspend fun updateUser(user: User) = appDao.updateUser(user)
+
+    suspend fun updateStockItemEmail(oldEmail: String, newEmail: String) = appDao.updateStockItemEmail(oldEmail, newEmail)
+
+    suspend fun updateCustomerEmail(oldEmail: String, newEmail: String) = appDao.updateCustomerEmail(oldEmail, newEmail)
+
+    suspend fun updateDealerEmail(oldEmail: String, newEmail: String) = appDao.updateDealerEmail(oldEmail, newEmail)
+
+    suspend fun updateTransactionEmail(oldEmail: String, newEmail: String) = appDao.updateTransactionEmail(oldEmail, newEmail)
+
+    suspend fun deleteUserByEmail(oldEmail: String) = appDao.deleteUserByEmail(oldEmail)
 
     fun getStockItems(userEmail: String): Flow<List<StockItem>> = appDao.getStockItemsOfUser(userEmail)
 

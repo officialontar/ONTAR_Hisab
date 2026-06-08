@@ -42,6 +42,14 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _currentScreen = MutableStateFlow<String>("LOGIN")
     val currentScreen: StateFlow<String> = _currentScreen.asStateFlow()
 
+    // Slide-out right panel state
+    private val _showRightMenuDrawer = MutableStateFlow<Boolean>(false)
+    val showRightMenuDrawer: StateFlow<Boolean> = _showRightMenuDrawer.asStateFlow()
+
+    fun toggleRightMenuDrawer(show: Boolean) {
+        _showRightMenuDrawer.value = show
+    }
+
     fun navigateTo(screen: String) {
         _currentScreen.value = screen
     }
@@ -77,10 +85,83 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         }
     }
 
+    // User Shops State Flow
+    private val _userShops = MutableStateFlow<List<User>>(emptyList())
+    val userShops: StateFlow<List<User>> = _userShops.asStateFlow()
+
+    fun getBaseEmail(email: String): String {
+        return email.substringBefore('#')
+    }
+
+    fun loadShopsForActiveUser() {
+        val activeUser = _currentUser.value ?: return
+        val rootEmail = getBaseEmail(activeUser.email)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val list = repository.getAllShopsOfUser(rootEmail)
+                _userShops.value = list
+            } catch (e: java.lang.Exception) {
+                Log.e("AppViewModel", "Failed to load shops", e)
+            }
+        }
+    }
+
+    fun switchActiveShop(targetUser: User) {
+        viewModelScope.launch {
+            _currentUser.value = targetUser
+            showToast(if (_isBengali.value) "${targetUser.shopName} এ পরিবর্তন করা হয়েছে" else "Switched to ${targetUser.shopName}")
+            loadShopsForActiveUser()
+            triggerCloudSync(isManual = false)
+        }
+    }
+
+    fun addNewShop(shopName: String, ownerName: String, phone: String, shopPic: String?, profilePic: String?) {
+        val rootUser = _currentUser.value ?: return
+        val baseEmail = getBaseEmail(rootUser.email)
+        
+        if (shopName.isBlank() || ownerName.isBlank() || phone.isBlank()) {
+            showToast(if (_isBengali.value) "দয়া করে সমস্ত তথ্য পূরণ করুন" else "Please complete all details")
+            return
+        }
+
+        if (_userShops.value.size >= 5) {
+            showToast(if (_isBengali.value) "আপনি সর্বোচ্চ ৫টি দোকান যুক্ত করতে পারবেন" else "You can manage a maximum of 5 shops")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val shopSuffix = "#shop_" + System.currentTimeMillis()
+                val newShopUser = User(
+                    email = baseEmail + shopSuffix,
+                    shopName = shopName.trim(),
+                    phone = phone.trim(),
+                    passwordHash = rootUser.passwordHash, // Keep same login PIN/password
+                    profilePicture = profilePic,
+                    ownerName = ownerName.trim(),
+                    shopPicture = shopPic
+                )
+                repository.registerUser(newShopUser)
+                
+                // Switch to the newly created shop automatically on Main dispatchers implicitly
+                viewModelScope.launch {
+                    _currentUser.value = newShopUser
+                    loadShopsForActiveUser()
+                    showToast(if (_isBengali.value) "নতুন দোকান সফলভাবে যুক্ত করা হয়েছে" else "New shop successfully added")
+                }
+            } catch (e: java.lang.Exception) {
+                viewModelScope.launch {
+                    showToast("${e.message}")
+                }
+            }
+        }
+    }
+
     init {
         viewModelScope.launch {
             _currentUser.collect { user ->
                 if (user != null) {
+                    loadShopsForActiveUser()
                     triggerCloudSync(isManual = false)
                 }
             }
@@ -390,10 +471,12 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             showToast(if (_isBengali.value) "দয়া করে সমস্ত তথ্য পূরণ করুন" else "Please complete all details")
             return
         }
+        val targetEmail = email.trim()
+        val oldUser = _currentUser.value
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val updatedUser = User(
-                    email = email.trim(),
+                    email = targetEmail,
                     shopName = shopName.trim(),
                     phone = phone.trim(),
                     passwordHash = pin.trim(),
@@ -401,11 +484,33 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     ownerName = ownerName.trim(),
                     shopPicture = shopPic
                 )
-                repository.updateUser(updatedUser)
+
+                if (oldUser != null && oldUser.email != targetEmail) {
+                    // Check if new email is already taken
+                    val existing = repository.getUser(targetEmail)
+                    if (existing != null) {
+                        withContext(Dispatchers.Main) {
+                            showToast(if (_isBengali.value) "এই ইমেইলটি ইতিমধ্যে অন্য দোকানে ব্যবহৃত হয়েছে!" else "This email is already in use by another shop!")
+                        }
+                        return@launch
+                    }
+                    // Register new user record
+                    repository.registerUser(updatedUser)
+                    // Cascade update references
+                    repository.updateStockItemEmail(oldUser.email, targetEmail)
+                    repository.updateCustomerEmail(oldUser.email, targetEmail)
+                    repository.updateDealerEmail(oldUser.email, targetEmail)
+                    repository.updateTransactionEmail(oldUser.email, targetEmail)
+                    // Delete old user record
+                    repository.deleteUserByEmail(oldUser.email)
+                } else {
+                    repository.updateUser(updatedUser)
+                }
+
                 _currentUser.value = updatedUser
 
                 // Sync updated user to Cloud Sync bucket
-                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(email.trim())
+                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetEmail)
                 val newPayload = if (cloudPayload != null) {
                     cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
                 } else {
@@ -418,7 +523,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                         timestamp = System.currentTimeMillis()
                     )
                 }
-                com.example.api.CloudSyncEngine.uploadPayload(email.trim(), newPayload)
+                com.example.api.CloudSyncEngine.uploadPayload(targetEmail, newPayload)
 
                 withContext(Dispatchers.Main) {
                     showToast(if (_isBengali.value) "প্রোফাইল সফলভাবে আপডেট ও সিন্ক্রোনাইজ করা হয়েছে!" else "Profile updated and synchronized successfully!")
@@ -1158,12 +1263,92 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     contents = listOf(Content(parts = listOf(Part(text = prompt)))),
                     generationConfig = GenerationConfig(temperature = 0.7f)
                 )
-                val response = GeminiClient.service.generateContent(apiKey, request)
+                val response = GeminiClient.generateContentWithFallback(apiKey, request)
                 val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 _aiReportText.value = result ?: (if (_isBengali.value) "কোনো তথ্য পাওয়া যায়নি।" else "No advice received.")
             } catch (e: Exception) {
                 Log.e("AppViewModel", "AI Error", e)
-                _aiReportText.value = if (_isBengali.value) "এআই লোড করতে ত্রুটি হয়েছে: ${e.localizedMessage}" else "AI Error: ${e.localizedMessage}"
+                
+                // Extremely smart fallback business advisor generator when network or Google AI Studio is overloaded/503!
+                val offlineReport = if (_isBengali.value) {
+                    val profitStatus = if (netProfit > 0) {
+                        "মোট নিট লাভ হয়েছে ৳$netProfit যা খুবই উৎসাহব্যঞ্জক। এই ধারা অব্যাহত রাখুন এবং লাভ পুনরায় ব্যবসায় খাটান।"
+                    } else if (netProfit < 0) {
+                        "বর্তমানে আপনার ব্যবসায় কিছু লোকসান (৳${java.lang.Math.abs(netProfit)}) দেখা যাচ্ছে। খরচ নিয়ন্ত্রণ বা পণ্যের বিক্রয় বাড়াতে নজর দিন।"
+                    } else {
+                        "বর্তমানে ব্যবসায় সমান সমান বা প্রারম্ভিক অবস্থায় আছে। বিক্রি বাড়িয়ে মুনাফা বৃদ্ধির চেষ্টা করতে পারেন।"
+                    }
+
+                    val stockStatus = if (lowStockItems.isNotEmpty()) {
+                        "আপনার বেশ কয়েকটি পণ্য ফুরিয়ে আসছে বা স্টকে কম আছে: ${lowStockItems.joinToString(", ")}। নতুন ক্রেতা ধরে রাখতে জলদি স্টক রি-লোড করার পরামর্শ দেওয়া হচ্ছে।"
+                    } else {
+                        "আপনার সকল পণ্যের স্টক পর্যাপ্ত রয়েছে যা চমৎকার কাস্টমার সন্তুষ্টি বৃদ্ধি করবে।"
+                    }
+
+                    val dueStatus = if (totalCustomerDues > 0) {
+                        "কাস্টমারদের কাছে আপনার মোট ৳$totalCustomerDues বাকি পাওনা রয়েছে। দ্রুত মূলধন বাড়াতে ‘বাকি খাতা’ থেকে তাদেরকে তাগাদা এসএমএস পাঠান।"
+                    } else {
+                        "কাস্টমারদের কাছে আপনার কোনো বকেয়া পাওনা নেই, এটি খুবই প্রশংসনীয় অর্থনৈতিক পরিচালনা।"
+                    }
+
+                    """
+                    ✨ [স্মার্ট অফলাইন এআই ব্যাকআপ বিশ্লেষণ] ✨
+                    গুগল এআই অনলাইন সার্ভার সাময়িকভাবে ব্যস্ত থাকায় নিচে আপনার লাইভ ব্যাকআপ রিপোর্ট শেয়ার করা হলো:
+
+                    📊 আর্থিক স্বাস্থ্যের অবস্থা:
+                    $profitStatus
+
+                    📦 পণ্য স্টক পর্যবেক্ষণ:
+                    $stockStatus
+
+                    💰 বাকি বকেয়া পরামর্শ:
+                    $dueStatus
+
+                    💡 আগামী দিনের জন্য স্মার্ট পরামর্শ:
+                    ১. অধিক বিক্রিত পণ্যের স্টক সর্বদা সচল রাখুন ও অলাভজনক পণ্যে মূলধন আটকে রাখবেন না।
+                    ২. ডিলার বা পাওনাদারদের সাথে হিসাব পরিষ্কার রাখুন এবং প্রয়োজনে বাকি খাতা থেকে ডিজিটাল অনুস্মারক ব্যবহার করুন।
+                    """.trimIndent()
+                } else {
+                    val profitStatus = if (netProfit > 0) {
+                        "Net profit is ৳$netProfit which is encouraging. Maintain this momentum and reinvest in your business."
+                    } else if (netProfit < 0) {
+                        "We noticed a deficit of ৳${java.lang.Math.abs(netProfit)}. Focus on cutting unnecessary expenses or raising sales margins."
+                    } else {
+                        "No significant net profit/loss recorded yet. Initiate promotional sales of popular goods."
+                    }
+
+                    val stockStatus = if (lowStockItems.isNotEmpty()) {
+                        "The following stocks are running critically low: ${lowStockItems.joinToString(", ")}. Restock promptly to avoid missing daily customer demands."
+                    } else {
+                        "All inventory levels are looking healthy and sufficient."
+                    }
+
+                    val dueStatus = if (totalCustomerDues > 0) {
+                        "Your total pending collectibles from clients stands at ৳$totalCustomerDues. Send payment drafts from ledger to secure your working capital."
+                    } else {
+                        "You have virtually zero dues outstanding, which indicates top-tier cashflow management."
+                    }
+
+                    """
+                    ✨ [Smart Offline AI Backup Advisory] ✨
+                    Google API is busy; your instant offline backup report is ready below:
+
+                    📊 Financial Health:
+                    $profitStatus
+
+                    📦 Inventory Observation:
+                    $stockStatus
+
+                    💰 Collectibles Suggestion:
+                    $dueStatus
+
+                    💡 Core Recommendations:
+                    1. Reinvest profit into high-moving items. Avoid tying up resources in slow-moving goods.
+                    2. Use the digital due billing feature to request timely customer paybacks.
+                    """.trimIndent()
+                }
+
+                _aiReportText.value = offlineReport
             } finally {
                 _isAiLoading.value = false
             }
@@ -1268,7 +1453,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     contents = listOf(Content(parts = listOf(Part(text = prompt)))),
                     generationConfig = GenerationConfig(temperature = 0.5f)
                 )
-                val response = GeminiClient.service.generateContent(apiKey, request)
+                val response = GeminiClient.generateContentWithFallback(apiKey, request)
                 val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 _draftedDueMsg.value = result?.trim()
             } catch (e: Exception) {

@@ -31,6 +31,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.material.icons.filled.Add
 import com.example.viewmodel.AppViewModel
 
 @Composable
@@ -49,8 +53,20 @@ fun AuthScreen(viewModel: AppViewModel) {
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var pinCode by remember { mutableStateOf("") }
-    var shopPicture by remember { mutableStateOf("") }
-    var ownerPicture by remember { mutableStateOf("") }
+    var shopPicture by remember { mutableStateOf("https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80") }
+    var ownerPicture by remember { mutableStateOf("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80") }
+
+    val shopLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { shopPicture = it.toString() }
+    }
+
+    val ownerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { ownerPicture = it.toString() }
+    }
 
     // Reset Flow inputs
     var resetIdentifier by remember { mutableStateOf("") }
@@ -284,7 +300,7 @@ fun AuthScreen(viewModel: AppViewModel) {
                                     .padding(bottom = 12.dp)
                             )
 
-                            // Preset Shop Picture picker
+                            // Preset Shop Picture picker (Zero URL Input!)
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.35f)),
                                 shape = RoundedCornerShape(16.dp),
@@ -294,87 +310,108 @@ fun AuthScreen(viewModel: AppViewModel) {
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = Translator.get("shop_pic", isBn),
+                                        text = if (isBn) "দোকানের ছবি নির্বাচন করুন" else "Select Shop Front Style",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.primary,
-                                        modifier = Modifier.padding(bottom = 6.dp)
+                                        modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                     
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        // Shop Preset 1
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (shopPicture == "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                .clickable {
-                                                    shopPicture = "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"
-                                                }
-                                                .padding(4.dp)
-                                        ) {
-                                            AsyncImage(
-                                                model = "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(50.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                            )
-                                            Text(
-                                                text = Translator.get("shop_pic_placeholder", isBn),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onSurface
-                                            )
-                                        }
+                                        val shopPresets = listOf(
+                                            "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80" to (if (isBn) "মুদি দোকান" else "Grocery"),
+                                            "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80" to (if (isBn) "সুপারশপ" else "Mart"),
+                                            "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=300&q=80" to (if (isBn) "টেলিকম" else "Telecom"),
+                                            "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=300&q=80" to (if (isBn) "অন্যান্য" else "Other")
+                                        )
 
-                                        // Shop Preset 2
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (shopPicture == "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                .clickable {
-                                                    shopPicture = "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80"
-                                                }
-                                                .padding(4.dp)
-                                        ) {
-                                            AsyncImage(
-                                                model = "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80",
-                                                contentDescription = null,
+                                        shopPresets.forEach { (url, label) ->
+                                            val isSelected = shopPicture == url
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
                                                 modifier = Modifier
-                                                    .size(50.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                            )
-                                            Text(
-                                                text = Translator.get("shop_pic_placeholder2", isBn),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onSurface
-                                            )
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                    .border(
+                                                        width = if (isSelected) 2.dp else 0.dp,
+                                                        color = if (isSelected) colors.primary else Color.Transparent,
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
+                                                    .clickable { shopPicture = url }
+                                                    .padding(4.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = url,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(45.dp)
+                                                        .clip(RoundedCornerShape(6.dp)),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = label,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isSelected) colors.primary else colors.onSurface
+                                                )
+                                            }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    OutlinedTextField(
-                                        value = shopPicture,
-                                        onValueChange = { shopPicture = it },
-                                        label = { Text(Translator.get("shop_pic", isBn)) },
-                                        singleLine = true,
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = { shopLauncher.launch("image/*") },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp)
-                                    )
+                                    ) {
+                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Main Gallery Image", fontSize = 11.sp)
+                                    }
+
+                                    val isCustomShop = !listOf(
+                                        "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
+                                        "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=300&q=80",
+                                        "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=300&q=80",
+                                        "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=300&q=80"
+                                    ).contains(shopPicture) && shopPicture.isNotBlank()
+
+                                    if (isCustomShop) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(colors.primary.copy(alpha = 0.1f))
+                                                .padding(6.dp)
+                                        ) {
+                                            AsyncImage(
+                                                model = shopPicture,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(35.dp)
+                                                    .clip(RoundedCornerShape(4.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = if (isBn) "গ্যালারি ইমেজ সফলভাবে যুক্ত হয়েছে!" else "Gallery image successfully added!",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.primary
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
-                            // Preset Owner Profile Picture picker
+                            // Preset Owner Profile Picture picker (Zero URL Input!)
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.35f)),
                                 shape = RoundedCornerShape(16.dp),
@@ -384,83 +421,104 @@ fun AuthScreen(viewModel: AppViewModel) {
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = Translator.get("owner_pic", isBn),
+                                        text = if (isBn) "দোকানদারের প্রোফাইল ছবি" else "Select Shopkeeper Profile",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.primary,
-                                        modifier = Modifier.padding(bottom = 6.dp)
+                                        modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                     
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        // Owner Preset 1
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (ownerPicture == "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                .clickable {
-                                                    ownerPicture = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-                                                }
-                                                .padding(4.dp)
-                                        ) {
-                                            AsyncImage(
-                                                model = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .size(50.dp)
-                                                    .clip(CircleShape)
-                                            )
-                                            Text(
-                                                text = Translator.get("owner_pic_placeholder", isBn),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onSurface
-                                            )
-                                        }
+                                        val ownerPresets = listOf(
+                                            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80" to (if (isBn) "মালিক ১" else "Owner 1"),
+                                            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" to (if (isBn) "মালিক ২" else "Owner 2"),
+                                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" to (if (isBn) "মালিক ৩" else "Owner 3"),
+                                            "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=200&q=80" to (if (isBn) "মালিক ৪" else "Owner 4")
+                                        )
 
-                                        // Owner Preset 2
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (ownerPicture == "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80") colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                .clickable {
-                                                    ownerPicture = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80"
-                                                }
-                                                .padding(4.dp)
-                                        ) {
-                                            AsyncImage(
-                                                model = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
-                                                contentDescription = null,
+                                        ownerPresets.forEach { (url, label) ->
+                                            val isSelected = ownerPicture == url
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
                                                 modifier = Modifier
-                                                    .size(50.dp)
-                                                    .clip(CircleShape)
-                                            )
-                                            Text(
-                                                text = Translator.get("owner_pic_placeholder2", isBn),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onSurface
-                                            )
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                    .border(
+                                                        width = if (isSelected) 2.dp else 0.dp,
+                                                        color = if (isSelected) colors.primary else Color.Transparent,
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
+                                                    .clickable { ownerPicture = url }
+                                                    .padding(4.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = url,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(45.dp)
+                                                        .clip(CircleShape),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = label,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isSelected) colors.primary else colors.onSurface
+                                                )
+                                            }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    OutlinedTextField(
-                                        value = ownerPicture,
-                                        onValueChange = { ownerPicture = it },
-                                        label = { Text(Translator.get("owner_pic", isBn)) },
-                                        singleLine = true,
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedButton(
+                                        onClick = { ownerLauncher.launch("image/*") },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp)
-                                    )
+                                    ) {
+                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Owner Profile Picture", fontSize = 11.sp)
+                                    }
+
+                                    val isCustomOwner = !listOf(
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=200&q=80"
+                                    ).contains(ownerPicture) && ownerPicture.isNotBlank()
+
+                                    if (isCustomOwner) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(colors.primary.copy(alpha = 0.1f))
+                                                .padding(6.dp)
+                                        ) {
+                                            AsyncImage(
+                                                model = ownerPicture,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(35.dp)
+                                                    .clip(CircleShape),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = if (isBn) "গ্যালারি ইমেজ সফলভাবে যুক্ত হয়েছে!" else "Gallery image successfully added!",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.primary
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

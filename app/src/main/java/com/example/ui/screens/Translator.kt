@@ -25,7 +25,7 @@ object Translator {
         "due_summary" to "বাকি আদায়যোগ্য",
         "owed_summary" to "ডিলার বকেয়া",
         "stock_manager" to "পণ্য স্টক খাতা",
-        "sales_billing" to "বিক্রি ও টালি",
+        "sales_billing" to "দৈনিক বিক্রি",
         "customer_ledger" to "বাকি খাতা (গ্রাহক)",
         "dealer_ledger" to "ডিলার ও পাওনাদার",
         "reports" to "হিসাব নিকাশ ও রিপোর্ট",

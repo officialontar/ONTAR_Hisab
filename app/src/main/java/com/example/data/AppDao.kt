@@ -12,11 +12,29 @@ interface AppDao {
     @Query("SELECT * FROM users WHERE email = :identifier OR phone = :identifier LIMIT 1")
     suspend fun getUserByIdentifier(identifier: String): User?
 
+    @Query("SELECT * FROM users WHERE email = :rootEmail OR email LIKE :rootEmail || '#%'")
+    suspend fun getAllShopsOfUser(rootEmail: String): List<User>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun registerUser(user: User)
 
     @Update
     suspend fun updateUser(user: User)
+
+    @Query("UPDATE stock_items SET userEmail = :newEmail WHERE userEmail = :oldEmail")
+    suspend fun updateStockItemEmail(oldEmail: String, newEmail: String)
+
+    @Query("UPDATE customers SET userEmail = :newEmail WHERE userEmail = :oldEmail")
+    suspend fun updateCustomerEmail(oldEmail: String, newEmail: String)
+
+    @Query("UPDATE dealers SET userEmail = :newEmail WHERE userEmail = :oldEmail")
+    suspend fun updateDealerEmail(oldEmail: String, newEmail: String)
+
+    @Query("UPDATE transactions SET userEmail = :newEmail WHERE userEmail = :oldEmail")
+    suspend fun updateTransactionEmail(oldEmail: String, newEmail: String)
+
+    @Query("DELETE FROM users WHERE email = :oldEmail")
+    suspend fun deleteUserByEmail(oldEmail: String)
 
     // --- STOCK QUERIES ---
     @Query("SELECT * FROM stock_items WHERE userEmail = :userEmail ORDER BY name ASC")
