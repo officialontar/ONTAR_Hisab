@@ -17,11 +17,11 @@ data class GeminiRequest(
 )
 
 data class Content(
-    val parts: List<Part>
+    val parts: List<Part>? = null
 )
 
 data class Part(
-    val text: String
+    val text: String? = null
 )
 
 data class GenerationConfig(

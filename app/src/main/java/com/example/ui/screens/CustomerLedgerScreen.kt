@@ -958,7 +958,7 @@ fun CustomerRecordCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     if (!customer.photoUri.isNullOrEmpty()) {
                         coil.compose.AsyncImage(
                             model = customer.photoUri,
@@ -1061,7 +1061,7 @@ fun CustomerRecordCard(
 
             Divider(modifier = Modifier.padding(vertical = 12.dp), color = colors.onBackground.copy(alpha = 0.05f))
 
-            // Due actions bar
+            // Due actions bar holding transactions on left and edit/delete on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1120,13 +1120,24 @@ fun CustomerRecordCard(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    // Edit option
+                // Edit Profile & Delete customer options on right side
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Edit Profile option
                     IconButton(
                         onClick = onEditClick,
-                        modifier = Modifier.size(32.dp).testTag("btn_edit_customer_${customer.id}")
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("btn_edit_customer_${customer.id}")
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit profile", tint = colors.primary.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit profile",
+                            tint = colors.primary.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
 
                     // Delete customer option
@@ -1134,7 +1145,12 @@ fun CustomerRecordCard(
                         onClick = onDeleteClick,
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete customer", tint = colors.error.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete customer",
+                            tint = colors.error.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

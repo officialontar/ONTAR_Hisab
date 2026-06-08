@@ -601,8 +601,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
     // --- GEMINI AI ASSISTANT & SMS AI Draft ---
     fun askGeminiForBusinessHealth() {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey == "MY_GEMINI_API_KEY" || apiKey.isBlank()) {
+        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             _aiReportText.value = if (_isBengali.value) {
                 "দুঃখিত, কোনো এপিআই কী (API Key) পাওয়া যায়নি। দয়া করে গুগল এআই স্টুডিও-র (AI Studio UI) সিক্রেটস ড্যাশবোর্ডে GEMINI_API_KEY সেট করুন।"
             } else {
@@ -683,7 +683,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     val isMsgDrafting: StateFlow<Boolean> = _isMsgDrafting.asStateFlow()
 
     fun generateAiDueMessage(customerName: String, totalDue: Double, address: String? = null) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
         val shopName = _currentUser.value?.shopName ?: "দোকান"
         val shopPhone = _currentUser.value?.phone ?: ""
 
@@ -691,7 +691,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         val isAdvance = totalDue < 0
         val displayAmount = if (isAdvance) java.lang.Math.abs(totalDue) else totalDue
 
-        if (apiKey == "MY_GEMINI_API_KEY" || apiKey.isBlank()) {
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             // Local fallback due message writer if key is not set
             _draftedDueMsg.value = if (_isBengali.value) {
                 if (isAdvance) {
