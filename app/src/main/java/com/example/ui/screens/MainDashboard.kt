@@ -670,24 +670,6 @@ fun MainDashboard(viewModel: AppViewModel) {
 
                     // Headers action
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Language Toggle
-                        IconButton(
-                            onClick = { viewModel.toggleLanguage() },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(colors.primary.copy(alpha = 0.1f))
-                        ) {
-                            Text(
-                                text = if (isBn) "EN" else "বাং",
-                                color = colors.primary,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
                         // Cloud synchronizer
                         IconButton(
                             onClick = { viewModel.triggerCloudSync() },
@@ -711,48 +693,6 @@ fun MainDashboard(viewModel: AppViewModel) {
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Dark/Light Mode
-                        IconButton(
-                            onClick = { viewModel.toggleDarkMode() },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(colors.primary.copy(alpha = 0.1f))
-                        ) {
-                            Icon(
-                                imageVector = if (isDark) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Security / Change PIN Settings
-                        IconButton(
-                            onClick = {
-                                currentOldPinInput = ""
-                                currentNewPinInput = ""
-                                currentConfirmPinInput = ""
-                                showChangePinDialog = true
-                            },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(colors.primary.copy(alpha = 0.1f))
-                                .testTag("security_settings_icon_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = colors.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
                         }
 
                         Spacer(modifier = Modifier.width(6.dp))
@@ -1003,7 +943,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                         Spacer(modifier = Modifier.width(12.dp))
                         DashboardItemCard(
                             title = Translator.get("sales_billing", isBn),
-                            subtitle = if (isBn) "দৈনিক বিক্রি বা অন্তর হিসাব" else "Daily Sales or Antar Hisab",
+                            subtitle = if (isBn) "দৈনিক বিক্রি বা অন্তর হিসাব" else "Daily Sales or ONTAR Hisab",
                             icon = Icons.Default.ShoppingCart,
                             cardColor = colors.secondary,
                             testTag = "btn_sales_billing",

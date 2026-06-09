@@ -1227,6 +1227,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             val prompt = if (_isBengali.value) {
                 """
                 তুমি একটি মদি দোকানের প্রিমিয়াম বিজনেস এআই সহকারী।
+                গুরুত্বপূর্ণ শর্ত: উত্তরের বা বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
                 আমার দোকানের নাম: ${_currentUser.value?.shopName ?: "আমার দোকান"}
                 আমার মোট বিক্রয়: ৳$totalSales
                 আমার মোট খরচ: ৳$totalExpenses
@@ -1243,6 +1244,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             } else {
                 """
                 You are a Premium Grocery Store Business AI advisor.
+                Important restriction: You MUST begin your response with the Muslim greeting 'Assalamu Alaikum' (written in English as 'Assalamu Alaikum'). Do NOT use other greetings like 'Namaskar', 'Hello', 'Dear', or 'Greetings'.
                 Shop Name: ${_currentUser.value?.shopName ?: "My Shop"}
                 Total Sales: ৳$totalSales
                 Total Expenses: ৳$totalExpenses
@@ -1292,7 +1294,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     }
 
                     """
-                    ✨ [স্মার্ট অফলাইন এআই ব্যাকআপ বিশ্লেষণ] ✨
+                    আসসালামু আলাইকুম! ✨ [স্মার্ট অফলাইন এআই ব্যাকআপ বিশ্লেষণ] ✨
                     গুগল এআই অনলাইন সার্ভার সাময়িকভাবে ব্যস্ত থাকায় নিচে আপনার লাইভ ব্যাকআপ রিপোর্ট শেয়ার করা হলো:
 
                     📊 আর্থিক স্বাস্থ্যের অবস্থা:
@@ -1330,7 +1332,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     }
 
                     """
-                    ✨ [Smart Offline AI Backup Advisory] ✨
+                    Assalamu Alaikum! ✨ [Smart Offline AI Backup Advisory] ✨
                     Google API is busy; your instant offline backup report is ready below:
 
                     📊 Financial Health:
@@ -1378,15 +1380,15 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             // Local fallback due message writer if key is not set
             _draftedDueMsg.value = if (_isBengali.value) {
                 if (isAdvance) {
-                    "প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
                 } else {
-                    "প্রিয় $customerName$locationText, $shopName এ আপনার পূর্বে বাকি বকেয়া রয়েছে ৳$displayAmount। আপনার বকেয়া পরিশোধের জন্য বিনীত অনুরোধ করছি। যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার পূর্বে বাকি বকেয়া রয়েছে ৳$displayAmount। আপনার বকেয়া পরিশোধের জন্য বিনীত অনুরোধ করছি। যোগাযোগ: $shopPhone$ownerLineBn"
                 }
             } else {
                 if (isAdvance) {
-                    "Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us! Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us! Contact: $shopPhone$ownerLineEn"
                 } else {
-                    "Dear $customerName$locationText, your unpaid due at $shopName is ৳$displayAmount. Kindly clear your dues. Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear $customerName$locationText, your unpaid due at $shopName is ৳$displayAmount. Kindly clear your dues. Contact: $shopPhone$ownerLineEn"
                 }
             }
             return
@@ -1400,6 +1402,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 if (isAdvance) {
                     """
                     কাস্টমারকে তার অগ্রিম বা জমা টাকার জন্য ধন্যবাদ জানিয়ে এবং তার ব্যালেন্স অবহিত করতে একটি মিষ্টি ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
+                    গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
                     কাস্টমারের নাম: $customerName
                     কাস্টমারের এলাকা/ঠিকানা: ${address ?: "নির্দিষ্ট করা নেই"}
                     অগ্রিম জমা পরিমাণ: ৳$displayAmount
@@ -1412,6 +1415,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 } else {
                     """
                     কাস্টমারকে বাকি পরিশোধের তাগাদা দিতে একটি মিষ্টি ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
+                    গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
                     কাস্টমারের নাম: $customerName
                     কাস্টমারের এলাকা/ঠিকানা: ${address ?: "নির্দিষ্ট করা নেই"}
                     বাকি বকেয়া পরিমাণ: ৳$displayAmount
@@ -1426,6 +1430,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 if (isAdvance) {
                     """
                     Draft a polite, professional SMS thanking the customer for their advance deposit and informing them of their balance in English:
+                    Important constraint: You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
                     Customer Name: $customerName
                     Customer Address/Location: ${address ?: "Not provided"}
                     Advance Deposit amount: ৳$displayAmount
@@ -1437,6 +1442,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 } else {
                     """
                     Draft a polite, professional SMS payment reminder message in English:
+                    Important constraint: You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
                     Customer Name: $customerName
                     Customer Address/Location: ${address ?: "Not provided"}
                     Due amount: ৳$displayAmount
@@ -1468,6 +1474,124 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                         "Dear $customerName, you have an advance credit of ৳$displayAmount at $shopName. Thank you! Phone: $shopPhone$ownerLineEn"
                     } else {
                         "Dear $customerName, your pending payment of ৳$displayAmount is due at $shopName. Please resolve. Phone: $shopPhone$ownerLineEn"
+                    }
+                }
+            } finally {
+                _isMsgDrafting.value = false
+            }
+        }
+    }
+
+    fun generateAiDealerMessage(dealerName: String, totalOwed: Double, companyName: String? = null) {
+        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+        val shopName = _currentUser.value?.shopName ?: "দোকান"
+        val shopPhone = _currentUser.value?.phone ?: ""
+        val ownerName = _currentUser.value?.ownerName ?: ""
+ 
+        val companyText = if (!companyName.isNullOrBlank()) " ($companyName)" else ""
+        val isAdvance = totalOwed < 0
+        val displayAmount = if (isAdvance) java.lang.Math.abs(totalOwed) else totalOwed
+        val ownerLineBn = if (ownerName.isNotBlank()) "\nদোকানদারের পুরো নাম: $ownerName" else ""
+        val ownerLineEn = if (ownerName.isNotBlank()) "\nShopkeeper: $ownerName" else ""
+
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            // Local fallback due message writer if key is not set
+            _draftedDueMsg.value = if (_isBengali.value) {
+                if (isAdvance) {
+                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কোম্পানিকে আমাদের $shopName-এর পক্ষ থেকে ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি সরবরাহের অনুরোধ জানাচ্ছি। যোগাযোগ: $shopPhone$ownerLineBn"
+                } else {
+                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কাছে আমাদের $shopName-এর মোট ৳$displayAmount বকেয়া বা পাওনা দেনা রয়েছে। অতিসত্বর আমরা তা পরিশোধের চেষ্টা করব। যোগাযোগ: $shopPhone$ownerLineBn"
+                }
+            } else {
+                if (isAdvance) {
+                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, we have sent an advance payment of ৳$displayAmount from $shopName. Kindly dispatch our inventory stock. Contact: $shopPhone$ownerLineEn"
+                } else {
+                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, our outstanding trade payable is ৳$displayAmount from $shopName. We will settle this balance soon. Contact: $shopPhone$ownerLineEn"
+                }
+            }
+            return
+        }
+ 
+        _isMsgDrafting.value = true
+        _draftedDueMsg.value = null
+ 
+        viewModelScope.launch {
+            val prompt = if (_isBengali.value) {
+                if (isAdvance) {
+                    """
+                    কোম্পানি ডিলার অথবা পাইকারি বিক্রেতাকে অগ্রিম টাকা পাঠিয়ে পণ্যের দ্রুত ডেলিভারি চেয়ে একটি মিষ্টি, পেশাদার ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
+                    গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
+                    ডিলারের নাম: $dealerName
+                    ডিলারের কোম্পানি: ${companyName ?: "নির্দিষ্ট করা নেই"}
+                    অগ্রিম পরিশোধিত পরিমাণ: ৳$displayAmount
+                    দোকানের নাম: $shopName
+                    যোগাযোগের ফোন নাম্বার: $shopPhone
+                    দোকানদারের নাম: $ownerName
+                    
+                    বার্তাটি প্রফেশনাল ও সুন্দর থাকবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    """.trimIndent()
+                } else {
+                    """
+                    কোম্পানি ডিলার বা পাইকারি বিক্রেতার কাছে আমাদের বকেয়া পাওনা দেনা পরিশোধের বার্তা ও হিসাবের স্টেটমেন্ট নিশ্চিত করতে একটি মিষ্টি, পেশাদার ও প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
+                    গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
+                    ডিলারের নাম: $dealerName
+                    ডিলারের কোম্পানি: ${companyName ?: "নির্দিষ্ট করা নেই"}
+                    বকেয়া দেনার পরিমাণ: ৳$displayAmount
+                    দোকানের নাম: $shopName
+                    যোগাযোগের ফোন নাম্বার: $shopPhone
+                    দোকানদারের নাম: $ownerName
+                    
+                    বার্তাটি সংক্ষিপ্ত ও প্রফেশনাল থাকবে এবং অতিসত্বর বিল বা হিসাব মেটানোর সদিচ্ছা প্রকাশ করবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    """.trimIndent()
+                }
+            } else {
+                if (isAdvance) {
+                    """
+                    Draft a polite, professional SMS to a supplier or trade distributor acknowledging an advance deposit sent and asking for prompt inventory dispatch in English:
+                    Important constraint: You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
+                    Supplier Name: $dealerName
+                    Company/Brand: ${companyName ?: "Not provided"}
+                    Advance paid: ৳$displayAmount
+                    Shop Name: $shopName
+                    Shop contact phone: $shopPhone
+                    Shopkeeper Name: $ownerName
+                    Keep it professional, concise, and sweet. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    """.trimIndent()
+                } else {
+                    """
+                    Draft a polite, professional SMS payment acknowledgment or bill status verification update to a trader/supplier in English:
+                    Important constraint: You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
+                    Supplier Name: $dealerName
+                    Company/Brand: ${companyName ?: "Not provided"}
+                    Due trade debt: ৳$displayAmount
+                    Shop Name: $shopName
+                    Shop contact phone: $shopPhone
+                    Shopkeeper Name: $ownerName
+                    Keep it respectful, acknowledging the pending settle due, expressing intentions of clearing it. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    """.trimIndent()
+                }
+            }
+ 
+            try {
+                val request = GeminiRequest(
+                    contents = listOf(Content(parts = listOf(Part(text = prompt)))),
+                    generationConfig = GenerationConfig(temperature = 0.5f)
+                )
+                val response = GeminiClient.generateContentWithFallback(apiKey, request)
+                val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                _draftedDueMsg.value = result?.trim()
+            } catch (e: Exception) {
+                _draftedDueMsg.value = if (_isBengali.value) {
+                    if (isAdvance) {
+                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি ডেলিভারীর অনুরোধ। যোগাযোগ: $shopPhone$ownerLineBn"
+                    } else {
+                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount বকেয়া দেনা পরিশোধের আন্তরিক চেষ্টা করব। ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
+                    }
+                } else {
+                    if (isAdvance) {
+                        "Assalamu Alaikum, Dear Supplier $dealerName, we paid ৳$displayAmount in advance. Please proceed with our stock shipment. Phone: $shopPhone$ownerLineEn"
+                    } else {
+                        "Assalamu Alaikum, Dear Supplier $dealerName, we owe you an outstanding balance of ৳$displayAmount. We are working to resolve this. Phone: $shopPhone$ownerLineEn"
                     }
                 }
             } finally {

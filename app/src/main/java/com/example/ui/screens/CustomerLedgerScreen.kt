@@ -56,6 +56,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
 
     // Edit customer profile state
     var customerToEdit by remember { mutableStateOf<Customer?>(null) }
+    var customerToDelete by remember { mutableStateOf<Customer?>(null) }
     var editCustomerName by remember { mutableStateOf("") }
     var editCustomerPhone by remember { mutableStateOf("") }
     var editCustomerAddress by remember { mutableStateOf("") }
@@ -253,7 +254,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     editCustomerPhotoUri = customer.photoUri ?: ""
                                 },
                                 onDeleteClick = {
-                                    viewModel.deleteCustomer(customer)
+                                    customerToDelete = customer
                                 }
                             )
                         }
@@ -928,6 +929,48 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     }
                 )
             }
+
+            // DELETE CUSTOMER CONFIRMATION DIALOG
+            if (customerToDelete != null) {
+                AlertDialog(
+                    onDismissRequest = { customerToDelete = null },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.error) },
+                    title = {
+                        Text(
+                            text = if (isBn) "কাস্টমার মুছে ফেলবেন?" else "Delete Customer?",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = if (isBn) "আপনি কি নিশ্চিত যে আপনি '${customerToDelete?.name}' এবং তার সম্পূর্ণ লেনদেনের বিবরণ মুছে ফেলতে চান? এই অ্যাকশনটি পূর্বাবস্থায় ফিরিয়ে আনা সম্ভব নয়।"
+                            else "Are you sure you want to delete '${customerToDelete?.name}' and all of their transaction histories? This action cannot be undone.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                customerToDelete?.let {
+                                    viewModel.deleteCustomer(it)
+                                }
+                                customerToDelete = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.error, contentColor = colors.onError)
+                        ) {
+                            Text(if (isBn) "হ্যাঁ, মুছুন" else "Yes, Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { customerToDelete = null }
+                        ) {
+                            Text(if (isBn) "না, বাতিল" else "No, Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -1002,24 +1045,61 @@ fun CustomerRecordCard(
                     }
                 }
 
-                // Balance due
-                Column(horizontalAlignment = Alignment.End) {
-                    val isDeposit = customer.totalDue < 0
-                    Text(
-                        text = if (isDeposit) {
-                            (if (isBn) "জমা (অগ্রিম)" else "Advance Deposit")
-                        } else {
-                            (if (isBn) "বাকি পরিমাণ" else "Unpaid Due")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onBackground.copy(alpha = 0.4f)
-                    )
-                    Text(
-                        text = "৳ ${if (isDeposit) java.lang.Math.abs(customer.totalDue) else customer.totalDue}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isDeposit) Color(0xFF2E7D32) else if (customer.totalDue > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-                    )
+                // Balance due & Actions Row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        val isDeposit = customer.totalDue < 0
+                        Text(
+                            text = if (isDeposit) {
+                                (if (isBn) "জমা (অগ্রিম)" else "Advance Deposit")
+                            } else {
+                                (if (isBn) "বাকি পরিমাণ" else "Unpaid Due")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onBackground.copy(alpha = 0.4f)
+                        )
+                        Text(
+                            text = "৳ ${if (isDeposit) java.lang.Math.abs(customer.totalDue) else customer.totalDue}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isDeposit) Color(0xFF2E7D32) else if (customer.totalDue > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        IconButton(
+                            onClick = onEditClick,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_edit_customer_${customer.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit profile",
+                                tint = colors.primary.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_delete_customer_${customer.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete customer",
+                                tint = colors.error.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1117,40 +1197,6 @@ fun CustomerRecordCard(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                    }
-                }
-
-                // Edit Profile & Delete customer options on right side
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Edit Profile option
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .testTag("btn_edit_customer_${customer.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit profile",
-                            tint = colors.primary.copy(alpha = 0.8f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    // Delete customer option
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete customer",
-                            tint = colors.error.copy(alpha = 0.7f),
-                            modifier = Modifier.size(18.dp)
-                        )
                     }
                 }
             }

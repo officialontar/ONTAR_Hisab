@@ -26,6 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.AppViewModel
 import com.example.data.Dealer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import android.content.Intent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +37,12 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
     val isBn by viewModel.isBengali.collectAsState()
     val dealersList by viewModel.dealers.collectAsState()
     val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    val isDrafting by viewModel.isMsgDrafting.collectAsState()
+    val draftedMsg by viewModel.draftedDueMsg.collectAsState()
+    var activeDealerForSmsDraft by remember { mutableStateOf<Dealer?>(null) }
 
     // Form states
     var showAddDealerDialog by remember { mutableStateOf(false) }
@@ -48,6 +58,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
 
     // Edit dealer profile state
     var dealerToEdit by remember { mutableStateOf<Dealer?>(null) }
+    var dealerToDelete by remember { mutableStateOf<Dealer?>(null) }
     var editDealerName by remember { mutableStateOf("") }
     var editDealerPhone by remember { mutableStateOf("") }
     var editCompanyName by remember { mutableStateOf("") }
@@ -232,6 +243,10 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                 onHistoryClick = {
                                     selectedDealerForHistory = dealer
                                 },
+                                onRemindClick = {
+                                    activeDealerForSmsDraft = dealer
+                                    viewModel.generateAiDealerMessage(dealer.name, dealer.totalOwed, dealer.company)
+                                },
                                 onEditClick = {
                                     dealerToEdit = dealer
                                     editDealerName = dealer.name
@@ -240,7 +255,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     editDealerPhotoUri = dealer.photoUri ?: ""
                                 },
                                 onDeleteClick = {
-                                    viewModel.deleteDealer(dealer)
+                                    dealerToDelete = dealer
                                 }
                             )
                         }
@@ -772,6 +787,212 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     }
                 )
             }
+
+            // GEMINI AI REMINDER DRAFT PREVIEW DIALOG FOR SUPPLIER/DEALER
+            if (activeDealerForSmsDraft != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        activeDealerForSmsDraft = null
+                        viewModel.clearDraftedMsg()
+                    },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, null, tint = colors.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isBn) "ডিলারের জন্য এআই মেসেজ" else "Supplier AI Message",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    },
+                    text = {
+                        Column {
+                            if (isDrafting) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    CircularProgressIndicator(color = colors.primary)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = if (isBn) "জেমিনি এআই দিয়ে প্রিমিয়াম বার্তা লেখা হচ্ছে..." else "Gemini writing trade message...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onBackground.copy(alpha = 0.6f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = draftedMsg ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.onBackground,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(colors.onBackground.copy(alpha = 0.04f))
+                                        .padding(16.dp)
+                                        .testTag("gemini_sms_draft_text_dealer")
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = if (isBn) "💡 মেসেজটি কপি করে ডিলারকে সরাসরি এসএমএস বা হোয়াটসঅ্যাপে পাঠাতে পারেন।"
+                                    else "💡 Copy this drafted message to send to the supplier via SMS or WhatsApp.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (!isDrafting && draftedMsg != null) {
+                                    // Send direct SMS button using native Intent
+                                    Button(
+                                        onClick = {
+                                            val smsBody = draftedMsg ?: ""
+                                            val phone = activeDealerForSmsDraft?.phone ?: ""
+                                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                data = Uri.parse("smsto:$phone")
+                                                putExtra("sms_body", smsBody)
+                                            }
+                                            try {
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                    type = "vnd.android-dir/mms-sms"
+                                                    putExtra("address", phone)
+                                                    putExtra("sms_body", smsBody)
+                                                }
+                                                try {
+                                                    context.startActivity(fallbackIntent)
+                                                } catch (ex: Exception) {
+                                                    viewModel.showToast(if (isBn) "মেসেঞ্জার অ্যাপ পাওয়া যায়নি" else "No SMS messenger found")
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32), contentColor = Color.White),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(38.dp).testTag("btn_send_sms_direct_dealer")
+                                    ) {
+                                        Icon(Icons.Default.Send, null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(if (isBn) "এসএমএস" else "SMS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    // Send via WhatsApp
+                                    Button(
+                                        onClick = {
+                                            val smsBody = draftedMsg ?: ""
+                                            val phone = activeDealerForSmsDraft?.phone ?: ""
+                                            var cleanPhone = phone.replace("+", "").replace(" ", "").replace("-", "")
+                                            if (!cleanPhone.startsWith("88") && cleanPhone.length == 11) {
+                                                cleanPhone = "88$cleanPhone"
+                                            }
+                                            val url = "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(smsBody)}"
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                data = Uri.parse(url)
+                                            }
+                                            try {
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                viewModel.showToast(if (isBn) "হোয়াটসঅ্যাপ অ্যাপ পাওয়া যায়নি" else "WhatsApp not installed")
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366), contentColor = Color.White),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(38.dp).testTag("btn_send_whatsapp_dealer")
+                                    ) {
+                                        Icon(Icons.Default.Phone, null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(if (isBn) "হোয়াটসঅ্যাপ" else "WhatsApp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    // Copy Draft button
+                                    Button(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(draftedMsg ?: ""))
+                                            viewModel.showToast(if (isBn) "বার্তা ক্লিপবোর্ডে কপি করা হয়েছে!" else "Copied text to clipboard!")
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.1f), contentColor = colors.primary),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(38.dp).testTag("btn_copy_draft_dealer")
+                                    ) {
+                                        Icon(Icons.Default.Share, null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(if (isBn) "কপি" else "Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        activeDealerForSmsDraft = null
+                                        viewModel.clearDraftedMsg()
+                                    }
+                                ) {
+                                    Text(if (isBn) "বন্ধ করুন" else "Close")
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+
+            // DELETE DEALER CONFIRMATION DIALOG
+            if (dealerToDelete != null) {
+                AlertDialog(
+                    onDismissRequest = { dealerToDelete = null },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.error) },
+                    title = {
+                        Text(
+                            text = if (isBn) "ডিলার মুছে ফেলবেন?" else "Delete Supplier?",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = if (isBn) "আপনি কি নিশ্চিত যে আপনি '${dealerToDelete?.name}' এবং তার সম্পূর্ণ ক্রয় ও পরিশোধের বিবরণ মুছে ফেলতে চান? এই অ্যাকশনটি পূর্বাবস্থায় ফিরিয়ে আনা সম্ভব নয়।"
+                            else "Are you sure you want to delete '${dealerToDelete?.name}' and all of their purchase and payment histories? This action cannot be undone.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                dealerToDelete?.let {
+                                    viewModel.deleteDealer(it)
+                                }
+                                dealerToDelete = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.error, contentColor = colors.onError)
+                        ) {
+                            Text(if (isBn) "হ্যাঁ, মুছুন" else "Yes, Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { dealerToDelete = null }
+                        ) {
+                            Text(if (isBn) "না, বাতিল" else "No, Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -784,6 +1005,7 @@ fun DealerRecordCard(
     onPayoutClick: () -> Unit,
     onPurchaseClick: () -> Unit,
     onHistoryClick: () -> Unit,
+    onRemindClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -840,24 +1062,61 @@ fun DealerRecordCard(
                     }
                 }
 
-                // Balance owed
-                Column(horizontalAlignment = Alignment.End) {
-                    val isAdvance = dealer.totalOwed < 0
-                    Text(
-                        text = if (isAdvance) {
-                            (if (isBn) "অগ্রিম পরিশোধ (পাওনা)" else "Advance Paid")
-                        } else {
-                            (if (isBn) "ডিলার পাওনা (দেনা)" else "We Owe Supplier")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onBackground.copy(alpha = 0.4f)
-                    )
-                    Text(
-                        text = "৳ ${if (isAdvance) java.lang.Math.abs(dealer.totalOwed) else dealer.totalOwed}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isAdvance) Color(0xFF2E7D32) else if (dealer.totalOwed > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-                    )
+                // Balance owed & Actions Row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        val isAdvance = dealer.totalOwed < 0
+                        Text(
+                            text = if (isAdvance) {
+                                (if (isBn) "অগ্রিম পরিশোধ (পাওনা)" else "Advance Paid")
+                            } else {
+                                (if (isBn) "ডিলার পাওনা (দেনা)" else "We Owe Supplier")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onBackground.copy(alpha = 0.4f)
+                        )
+                        Text(
+                            text = "৳ ${if (isAdvance) java.lang.Math.abs(dealer.totalOwed) else dealer.totalOwed}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isAdvance) Color(0xFF2E7D32) else if (dealer.totalOwed > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        IconButton(
+                            onClick = onEditClick,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_edit_dealer_${dealer.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit profile",
+                                tint = colors.primary.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_delete_dealer_${dealer.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = colors.error.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -936,25 +1195,29 @@ fun DealerRecordCard(
                             fontWeight = FontWeight.Bold
                         )
                     }
+
+                    // Gemini AI SMS Draft
+                    if (dealer.totalOwed != 0.0) {
+                        Button(
+                            onClick = onRemindClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant, contentColor = colors.primary),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .height(34.dp)
+                                .testTag("btn_trigger_ai_sms_dealer_${dealer.name.replace(" ", "_")}")
+                        ) {
+                            Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "এআই এসএমএস",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    // Edit option
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier.size(32.dp).testTag("btn_edit_dealer_${dealer.id}")
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit profile", tint = colors.primary.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                    }
-
-                    // Delete dealer layout
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.error.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                    }
-                }
             }
         }
     }

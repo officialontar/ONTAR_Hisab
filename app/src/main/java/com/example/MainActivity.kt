@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.navigateTo("REPORTS") 
                                     },
                                     icon = { Icon(Icons.Default.Star, null) },
-                                    label = { Text(if (isBn) "অন্তর হিসাব" else "Antar Hisab", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                                    label = { Text(if (isBn) "অন্তর হিসাব" else "ONTAR Hisab", fontWeight = FontWeight.Bold, fontSize = 11.sp) }
                                 )
                                 NavigationBarItem(
                                     selected = showRightMenuDrawer,
@@ -442,7 +442,7 @@ class MainActivity : ComponentActivity() {
                                                     putExtra(
                                                         Intent.EXTRA_TEXT,
                                                         if (isBn) "অন্তর হিসাব অ্যাপটি ব্যবহার করে আপনার দোকানের হিসাব রাখুন সহজেই! ডাউনলোড লিঙ্ক: http://example.com/antarhisab_refer"
-                                                        else "Keep track of your shop books easily with Antar Hisab App! Download link: http://example.com/antarhisab_refer"
+                                                        else "Keep track of your shop books easily with ONTAR Hisab App! Download link: http://example.com/antarhisab_refer"
                                                     )
                                                 }
                                                 context.startActivity(Intent.createChooser(intent, "Share invite via"))
@@ -552,10 +552,26 @@ class MainActivity : ComponentActivity() {
                                                     color = colors.primary
                                                 )
                                             }
+                                            val androidVer = android.os.Build.VERSION.RELEASE ?: "12"
+                                            val bnVer = androidVer.map { c ->
+                                                when (c) {
+                                                    '0' -> '০'
+                                                    '1' -> '১'
+                                                    '2' -> '২'
+                                                    '3' -> '৩'
+                                                    '4' -> '৪'
+                                                    '5' -> '৫'
+                                                    '6' -> '৬'
+                                                    '7' -> '৭'
+                                                    '8' -> '৮'
+                                                    '9' -> '৯'
+                                                    else -> c
+                                                }
+                                            }.joinToString("")
                                             Text(
-                                                text = if (isBn) "ভার্সন - ১.০" else "Version - 1.0",
+                                                text = if (isBn) "ভার্স ৭.০.$bnVer" else "Vers 7.0.$androidVer",
                                                 fontSize = 12.sp,
-                                                fontWeight = FontWeight.SemiBold,
+                                                fontWeight = FontWeight.Bold,
                                                 color = colors.onSurface.copy(alpha = 0.6f)
                                             )
                                         }
