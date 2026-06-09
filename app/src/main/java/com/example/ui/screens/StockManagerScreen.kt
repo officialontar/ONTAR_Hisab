@@ -777,72 +777,84 @@ fun StockItemCard(
         colors = CardDefaults.cardColors(containerColor = colors.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(16.dp)
         ) {
-            // Left - Thumbnail (if loaded)
-            if (!item.imageResName.isNullOrEmpty()) {
-                coil.compose.AsyncImage(
-                    model = item.imageResName,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .padding(end = 12.dp),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left - Thumbnail (if loaded)
+                if (!item.imageResName.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageResName,
+                        contentDescription = null,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(colors.primary.copy(alpha = 0.08f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .padding(end = 12.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = item.category,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.primary,
-                            fontWeight = FontWeight.SemiBold
+                            text = item.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Black,
+                            color = colors.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.primary.copy(alpha = 0.08f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = item.category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "${if (isBn) "বিক্রয় মূল্য" else "Sell"}: ৳${item.salesPrice}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onBackground.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 16.dp)
+                        )
+                        Text(
+                            text = "${if (isBn) "ক্রয় মূল্য" else "Buy"}: ৳${item.purchasePrice}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onBackground.copy(alpha = 0.4f)
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            Divider(color = colors.onBackground.copy(alpha = 0.05f))
+            Spacer(modifier = Modifier.height(10.dp))
 
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "${if (isBn) "বিক্রয় মূল্য" else "Sell"}: ৳${item.salesPrice}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onBackground.copy(alpha = 0.6f),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
-                    Text(
-                        text = "${if (isBn) "ক্রয় মূল্য" else "Buy"}: ৳${item.purchasePrice}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onBackground.copy(alpha = 0.4f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Stock details with customized alert color backgrounds
+            // Bottom action row containing Stock Status info on left, action buttons on right!
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left side: Stock status and count
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val alertColor = when {
                         isOutOfStock -> Color(0xFFD32F2F)  // Danger Red
@@ -878,31 +890,60 @@ fun StockItemCard(
                         color = colors.onBackground
                     )
                 }
-            }
 
-            // Quick stocks actions
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Update full profile button
-                IconButton(
-                    onClick = onEditProfileClick,
-                    modifier = Modifier.background(colors.secondaryContainer, RoundedCornerShape(8.dp)).testTag("edit_item_profile_btn_${item.id}")
+                // Right side: Quick actions (+, Edit, Delete)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Profile", tint = colors.onSecondaryContainer)
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                // Quick count update button
-                IconButton(
-                    onClick = onUpdateCountClick,
-                    modifier = Modifier.background(colors.primary.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Quick stock counts adjustment", tint = colors.primary)
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.background(colors.errorContainer.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete item", tint = colors.error)
+                    // Quick count update button (+)
+                    IconButton(
+                        onClick = onUpdateCountClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.primary.copy(alpha = 0.08f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Quick stock counts adjustment",
+                            tint = colors.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Update full profile button (Edit)
+                    IconButton(
+                        onClick = onEditProfileClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.secondary.copy(alpha = 0.08f))
+                            .testTag("edit_item_profile_btn_${item.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Profile",
+                            tint = colors.secondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Delete item button (Delete)
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.error.copy(alpha = 0.08f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete item",
+                            tint = colors.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

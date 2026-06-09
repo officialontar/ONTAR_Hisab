@@ -1023,20 +1023,23 @@ fun DealerRecordCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     if (!dealer.photoUri.isNullOrEmpty()) {
                         coil.compose.AsyncImage(
                             model = dealer.photoUri,
                             contentDescription = null,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(42.dp)
                                 .clip(RoundedCornerShape(10.dp)),
                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
                     } else {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(42.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(colors.secondary.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.Center
@@ -1052,7 +1055,9 @@ fun DealerRecordCard(
                             text = dealer.name,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Black,
-                            color = colors.onBackground
+                            color = colors.onBackground,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         Text(
                             text = dealer.phone,
@@ -1062,61 +1067,26 @@ fun DealerRecordCard(
                     }
                 }
 
-                // Balance owed & Actions Row
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        val isAdvance = dealer.totalOwed < 0
-                        Text(
-                            text = if (isAdvance) {
-                                (if (isBn) "অগ্রিম পরিশোধ (পাওনা)" else "Advance Paid")
-                            } else {
-                                (if (isBn) "ডিলার পাওনা (দেনা)" else "We Owe Supplier")
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.onBackground.copy(alpha = 0.4f)
-                        )
-                        Text(
-                            text = "৳ ${if (isAdvance) java.lang.Math.abs(dealer.totalOwed) else dealer.totalOwed}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (isAdvance) Color(0xFF2E7D32) else if (dealer.totalOwed > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
-                        )
-                    }
+                Spacer(modifier = Modifier.width(10.dp))
 
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        IconButton(
-                            onClick = onEditClick,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .testTag("btn_edit_dealer_${dealer.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit profile",
-                                tint = colors.primary.copy(alpha = 0.8f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .testTag("btn_delete_dealer_${dealer.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = colors.error.copy(alpha = 0.8f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
+                // Balance owed
+                Column(horizontalAlignment = Alignment.End) {
+                    val isAdvance = dealer.totalOwed < 0
+                    Text(
+                        text = if (isAdvance) {
+                            (if (isBn) "অগ্রিম পরিশোধ (পাওনা)" else "Advance Paid")
+                        } else {
+                            (if (isBn) "ডিলার পাওনা (দেনা)" else "We Owe Supplier")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onBackground.copy(alpha = 0.4f)
+                    )
+                    Text(
+                        text = "৳ ${if (isAdvance) java.lang.Math.abs(dealer.totalOwed) else dealer.totalOwed}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isAdvance) Color(0xFF2E7D32) else if (dealer.totalOwed > 0) Color(0xFFD32F2F) else Color(0xFF2E7D32)
+                    )
                 }
             }
 
@@ -1159,65 +1129,117 @@ fun DealerRecordCard(
 
             Divider(modifier = Modifier.padding(vertical = 12.dp), color = colors.onBackground.copy(alpha = 0.05f))
 
-            // Dealer actions bar
+            // Dealer actions row 1: Core transactions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Pay off debt
+                Button(
+                    onClick = onPayoutClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondary.copy(alpha = 0.12f), contentColor = colors.secondary),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                ) {
+                    Text(
+                        text = if (isBn) "৳ পরিশোধ/অগ্রিম" else "৳ Pay / Advance",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Record new purchase on credit
+                Button(
+                    onClick = onPurchaseClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant, contentColor = colors.onSurface),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                ) {
+                    Text(
+                        text = if (isBn) "+ ক্রয় লিখুন" else "+ Buy Owed",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Dealer actions row 2: AI utilities & profiling (Edit/Delete)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Pay off debt
+                // Gemini AI SMS Draft (Left aligned)
+                if (dealer.totalOwed != 0.0) {
                     Button(
-                        onClick = onPayoutClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.secondary.copy(alpha = 0.12f), contentColor = colors.secondary),
+                        onClick = onRemindClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.08f), contentColor = colors.primary),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .testTag("btn_trigger_ai_sms_dealer_${dealer.name.replace(" ", "_")}")
                     ) {
+                        Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isBn) "৳ টাকা পরিশোধ/অগ্রিম" else "৳ Pay / Advance",
+                            text = if (isBn) "এআই এসএমএস" else "AI SMS Draft",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-
-                    // Record new purchase on credit
-                    Button(
-                        onClick = onPurchaseClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant, contentColor = colors.onSurface),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Text(
-                            text = if (isBn) "+ পণ্য ক্রয় লিখুন" else "+ Buy Owed",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Gemini AI SMS Draft
-                    if (dealer.totalOwed != 0.0) {
-                        Button(
-                            onClick = onRemindClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant, contentColor = colors.primary),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier
-                                .height(34.dp)
-                                .testTag("btn_trigger_ai_sms_dealer_${dealer.name.replace(" ", "_")}")
-                        ) {
-                            Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "এআই এসএমএস",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
                 }
 
+                // Profile maintenance on right side
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Edit Profile option
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.primary.copy(alpha = 0.08f))
+                            .testTag("btn_edit_dealer_${dealer.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit profile",
+                            tint = colors.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Delete dealer option
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.error.copy(alpha = 0.08f))
+                            .testTag("btn_delete_dealer_${dealer.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = colors.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
         }
     }
