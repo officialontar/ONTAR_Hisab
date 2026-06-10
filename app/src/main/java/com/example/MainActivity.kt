@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
                             "DEALER_LEDGER" -> DealerLedgerScreen(viewModel)
                             "REPORTS" -> ReportsScreen(viewModel)
                             "AI_COACH" -> AiCoachScreen(viewModel)
+                            "SUPER_ADMIN" -> SuperAdminScreen(viewModel)
                             else -> AuthScreen(viewModel)
                         }
 
@@ -250,7 +251,7 @@ class MainActivity : ComponentActivity() {
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Column {
                                                         Text(
-                                                            text = user.ownerName ?: "",
+                                                            text = com.example.data.OwnerParser.getFirstOwnerName(user.ownerName, if (isBn) "প্রোফাইল মালিক" else "Profile Owner"),
                                                             style = MaterialTheme.typography.bodyLarge,
                                                             fontWeight = FontWeight.Bold,
                                                             color = colors.onSurface
@@ -262,7 +263,7 @@ class MainActivity : ComponentActivity() {
                                                             fontWeight = FontWeight.SemiBold
                                                         )
                                                         Text(
-                                                            text = user.phone,
+                                                            text = com.example.data.OwnerParser.getFirstOwnerPhone(user.ownerName, user.phone),
                                                             style = MaterialTheme.typography.bodySmall,
                                                             color = colors.onSurface.copy(alpha = 0.6f)
                                                         )
@@ -317,7 +318,7 @@ class MainActivity : ComponentActivity() {
                                                         color = colors.onSurface
                                                     )
                                                     Text(
-                                                        text = shopUser.ownerName ?: "",
+                                                        text = com.example.data.OwnerParser.getFirstOwnerName(shopUser.ownerName, if (isBn) "মালিক" else "Owner"),
                                                         fontSize = 11.sp,
                                                         color = colors.onSurface.copy(alpha = 0.6f)
                                                     )
@@ -506,6 +507,26 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         Spacer(modifier = Modifier.height(16.dp))
+
+                                        if (currentUser?.email?.trim()?.lowercase() == "mdanisujjamanontar@gmail.com") {
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                                            Text(
+                                                text = if (isBn) "বিশেষ प्रशासनिक নিয়ন্ত্রণ" else "Super Admin Area",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = colors.error.copy(alpha = 0.8f),
+                                                modifier = Modifier.padding(bottom = 8.dp)
+                                            )
+                                            MenuDrawerListItem(
+                                                icon = Icons.Default.Settings,
+                                                title = if (isBn) "সুপার এডমিন ড্যাশবোর্ড" else "Super Admin Panel",
+                                                onClick = {
+                                                    viewModel.toggleRightMenuDrawer(false)
+                                                    viewModel.navigateTo("SUPER_ADMIN")
+                                                }
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                        }
 
                                         // Logout Button
                                         Button(

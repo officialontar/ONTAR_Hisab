@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -55,6 +56,20 @@ fun AuthScreen(viewModel: AppViewModel) {
     var pinCode by remember { mutableStateOf("") }
     var shopPicture by remember { mutableStateOf("https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80") }
     var ownerPicture by remember { mutableStateOf("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80") }
+
+    // Multi-owner states
+    var ownershipType by remember { mutableStateOf("single") } // "single" or "joint"
+    var jointCount by remember { mutableStateOf(2) } // 2 or 3
+    var jointName1 by remember { mutableStateOf("") }
+    var jointPhone1 by remember { mutableStateOf("") }
+    var jointEmail1 by remember { mutableStateOf("") }
+    var jointName2 by remember { mutableStateOf("") }
+    var jointPhone2 by remember { mutableStateOf("") }
+    var jointEmail2 by remember { mutableStateOf("") }
+    var jointName3 by remember { mutableStateOf("") }
+    var jointPhone3 by remember { mutableStateOf("") }
+    var jointEmail3 by remember { mutableStateOf("") }
+
 
     val shopLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -273,32 +288,282 @@ fun AuthScreen(viewModel: AppViewModel) {
                                     .padding(bottom = 12.dp)
                             )
 
-                            // Shop Owner Name
-                            OutlinedTextField(
-                                value = ownerName,
-                                onValueChange = { ownerName = it },
-                                label = { Text(Translator.get("owner_name", isBn)) },
-                                leadingIcon = { Icon(Icons.Default.Person, null) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
+                            // Ownership Type Selection Row
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 12.dp)
-                            )
+                            ) {
+                                Text(
+                                    text = if (isBn) "দোকানের মালিকানার ধরন:" else "Ownership Type:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (ownershipType == "single") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                            .clickable { ownershipType = "single" }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (isBn) "একক মালিক (১)" else "Single Owner (1)",
+                                            color = if (ownershipType == "single") colors.onPrimary else colors.onSurface,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (ownershipType == "joint") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                            .clickable { ownershipType = "joint" }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (isBn) "যৌথ মালিক (>১)" else "Joint Owners (>1)",
+                                            color = if (ownershipType == "joint") colors.onPrimary else colors.onSurface,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
 
-                            // Mobile number
-                            OutlinedTextField(
-                                value = phone,
-                                onValueChange = { phone = it },
-                                label = { Text(Translator.get("phone_number", isBn)) },
-                                leadingIcon = { Icon(Icons.Default.Phone, null) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 12.dp)
-                            )
+                            if (ownershipType == "joint") {
+                                // Joint Owner count selector
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                ) {
+                                    Text(
+                                        text = if (isBn) "মালিকের সংখ্যা:" else "Number of Owners:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.secondary,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (jointCount == 2) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                                .clickable { jointCount = 2 }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (isBn) "২ জন অংশীদার" else "2 Partners",
+                                                color = if (jointCount == 2) colors.onSecondary else colors.onSurface,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (jointCount == 3) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                                .clickable { jointCount = 3 }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (isBn) "৩ জন অংশীদার" else "3 Partners",
+                                                color = if (jointCount == 3) colors.onSecondary else colors.onSurface,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Render Joint Owner 1 Card info
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(
+                                            text = if (isBn) "প্রথম মালিকের তথ্য (Owner 1):" else "Owner 1 Details:",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        OutlinedTextField(
+                                            value = jointName1,
+                                            onValueChange = { jointName1 = it },
+                                            label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                            leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = jointPhone1,
+                                            onValueChange = { jointPhone1 = it },
+                                            label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                            leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = jointEmail1,
+                                            onValueChange = { jointEmail1 = it },
+                                            label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                            leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
+                                // Render Joint Owner 2 Card info
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(
+                                            text = if (isBn) "দ্বিতীয় মালিকের তথ্য (Owner 2):" else "Owner 2 Details:",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        OutlinedTextField(
+                                            value = jointName2,
+                                            onValueChange = { jointName2 = it },
+                                            label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                            leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = jointPhone2,
+                                            onValueChange = { jointPhone2 = it },
+                                            label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                            leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = jointEmail2,
+                                            onValueChange = { jointEmail2 = it },
+                                            label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                            leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
+                                if (jointCount == 3) {
+                                    // Render Joint Owner 3 Card info
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = colors.surface),
+                                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Text(
+                                                text = if (isBn) "তৃতীয় মালিকের তথ্য (Owner 3):" else "Owner 3 Details:",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.primary
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            OutlinedTextField(
+                                                value = jointName3,
+                                                onValueChange = { jointName3 = it },
+                                                label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                                leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                                singleLine = true,
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                            )
+                                            OutlinedTextField(
+                                                value = jointPhone3,
+                                                onValueChange = { jointPhone3 = it },
+                                                label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                                leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                                singleLine = true,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                            )
+                                            OutlinedTextField(
+                                                value = jointEmail3,
+                                                onValueChange = { jointEmail3 = it },
+                                                label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                                leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                                singleLine = true,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Shop Owner Name
+                                OutlinedTextField(
+                                    value = ownerName,
+                                    onValueChange = { ownerName = it },
+                                    label = { Text(Translator.get("owner_name", isBn)) },
+                                    leadingIcon = { Icon(Icons.Default.Person, null) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                )
+
+                                // Mobile number
+                                OutlinedTextField(
+                                    value = phone,
+                                    onValueChange = { phone = it },
+                                    label = { Text(Translator.get("phone_number", isBn)) },
+                                    leadingIcon = { Icon(Icons.Default.Phone, null) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                )
+                            }
+
 
                             // Preset Shop Picture picker (Zero URL Input!)
                             Card(
@@ -524,18 +789,20 @@ fun AuthScreen(viewModel: AppViewModel) {
                         }
 
                         // Email Address
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text(Translator.get(if (isRegisterTab) "register_email" else "login_email", isBn)) },
-                            leadingIcon = { Icon(Icons.Default.Email, null) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        )
+                        if (!isRegisterTab || ownershipType == "single") {
+                            OutlinedTextField(
+                                value = email,
+                                onValueChange = { email = it },
+                                label = { Text(Translator.get(if (isRegisterTab) "register_email" else "login_email", isBn)) },
+                                leadingIcon = { Icon(Icons.Default.Email, null) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp)
+                            )
+                        }
 
                         // 4-Digit secure PIN Code
                         OutlinedTextField(
@@ -582,11 +849,37 @@ fun AuthScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 if (isRegisterTab) {
+                                    val finalOwnerName: String
+                                    val finalPhone: String
+                                    val finalEmail: String
+                                    
+                                    if (ownershipType == "single") {
+                                        finalOwnerName = ownerName
+                                        finalPhone = phone
+                                        finalEmail = email.trim()
+                                    } else {
+                                        // Validation: Check if joint owner fields are empty
+                                        if (jointName1.isBlank() || jointPhone1.isBlank() || jointName2.isBlank() || jointPhone2.isBlank() || (jointCount == 3 && (jointName3.isBlank() || jointPhone3.isBlank()))) {
+                                            viewModel.showToast(if (isBn) "দয়া করে অংশীদারদের নাম এবং মোবাইল নাম্বার সবগুলো পূরণ করুন" else "Please fill name and mobile numbers of all partners")
+                                            return@Button
+                                        }
+                                        
+                                        val list = mutableListOf<com.example.data.OwnerInfo>()
+                                        list.add(com.example.data.OwnerInfo(jointName1.trim(), jointPhone1.trim(), jointEmail1.trim()))
+                                        list.add(com.example.data.OwnerInfo(jointName2.trim(), jointPhone2.trim(), jointEmail2.trim()))
+                                        if (jointCount == 3) {
+                                            list.add(com.example.data.OwnerInfo(jointName3.trim(), jointPhone3.trim(), jointEmail3.trim()))
+                                        }
+                                        finalOwnerName = com.example.data.OwnerParser.serialize(list)
+                                        finalPhone = list.map { it.phone }.filter { it.isNotBlank() }.joinToString(", ")
+                                        finalEmail = if (jointEmail1.trim().isNotBlank()) jointEmail1.trim() else "joint_${jointPhone1.trim()}@shop.com"
+                                    }
+
                                     viewModel.registerNewUser(
                                         shopName = shopName,
-                                        ownerName = ownerName,
-                                        email = email,
-                                        phone = phone,
+                                        ownerName = finalOwnerName,
+                                        email = finalEmail,
+                                        phone = finalPhone,
                                         pin = pinCode,
                                         profilePic = ownerPicture.ifBlank { null },
                                         shopPic = shopPicture.ifBlank { null }
@@ -660,7 +953,9 @@ fun AuthScreen(viewModel: AppViewModel) {
                         // Enter OTP and new secure PIN
                         
                         // Simulations OTP visual block
-                        simulateOtp?.let { otp ->
+                        val resetUser = viewModel.resetUser.collectAsState().value
+                        if (resetUser != null) {
+                            val owners = com.example.data.OwnerParser.deserialize(resetUser.ownerName, resetUser.phone, resetUser.email)
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = colors.primaryContainer),
                                 shape = RoundedCornerShape(12.dp),
@@ -668,17 +963,67 @@ fun AuthScreen(viewModel: AppViewModel) {
                                     .fillMaxWidth()
                                     .padding(bottom = 16.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(text = "📲  ", fontSize = 18.sp)
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Text(text = "📲  ", fontSize = 20.sp)
+                                        Text(
+                                            text = if (isBn) "একক/অংশীদারী অ্যাকাউন্ট ওটিপি ডিস্ট্রিবিউশন" else "Unified Account OTP Distribution",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                    }
+                                    
+                                    simulateOtp?.let { otp ->
+                                        Text(
+                                            text = if (isBn) 
+                                                "নিরাপদ ওটিপি কোড: $otp" 
+                                            else 
+                                                "Secure Recovery OTP: $otp",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 16.sp,
+                                            color = colors.onPrimaryContainer,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                    }
+
                                     Text(
-                                        text = String.format(Translator.get("enter_sim_otp", isBn), otp),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.onPrimaryContainer
+                                        text = if (isBn) 
+                                            "এই একই ওটিপি নিরাপত্তা স্বার্থে সকল অংশীদারদের ফোন ও ইমেইলে পাঠানো হয়েছে:" 
+                                        else 
+                                            "For high security, the same OTP has been sent to all registered contacts:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onPrimaryContainer.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(bottom = 6.dp)
                                     )
+                                    
+                                    owners.forEachIndexed { i, owner ->
+                                        val oName = owner.name.ifBlank { if (isBn) "মালিক ${i+1}" else "Owner ${i+1}" }
+                                        val oPhone = owner.phone.ifBlank { if (isBn) "সংরক্ষিত নেই" else "N/A" }
+                                        val oEmail = owner.email.ifBlank { if (isBn) "সংরক্ষিত নেই" else "N/A" }
+                                        
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "• $oName",
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = colors.onPrimaryContainer
+                                            )
+                                            Text(
+                                                text = if (isBn) "  মোবাইল: $oPhone | ইমেইল: $oEmail" else "  Phone: $oPhone | Email: $oEmail",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = colors.onPrimaryContainer.copy(alpha = 0.7f),
+                                                modifier = Modifier.padding(start = 8.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

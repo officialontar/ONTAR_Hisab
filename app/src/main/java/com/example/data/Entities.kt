@@ -63,3 +63,57 @@ data class TransactionRecord(
     val customerId: Int? = null,
     val dealerId: Int? = null
 ) : Serializable
+
+data class OwnerInfo(
+    val name: String,
+    val phone: String,
+    val email: String
+) : Serializable
+
+object OwnerParser {
+    fun serialize(owners: List<OwnerInfo>): String {
+        val array = org.json.JSONArray()
+        owners.forEach { o ->
+            val obj = org.json.JSONObject()
+            obj.put("name", o.name)
+            obj.put("phone", o.phone)
+            obj.put("email", o.email)
+            array.put(obj)
+        }
+        return array.toString()
+    }
+
+    fun deserialize(ownerNameStr: String?, defaultPhone: String = "", defaultEmail: String = ""): List<OwnerInfo> {
+        if (ownerNameStr != null && ownerNameStr.trim().startsWith("[") && ownerNameStr.trim().endsWith("]")) {
+            try {
+                val list = mutableListOf<OwnerInfo>()
+                val array = org.json.JSONArray(ownerNameStr)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(OwnerInfo(
+                        name = obj.optString("name", ""),
+                        phone = obj.optString("phone", ""),
+                        email = obj.optString("email", "")
+                    ))
+                }
+                if (list.isNotEmpty()) return list
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+        val safeName = ownerNameStr ?: ""
+        return listOf(OwnerInfo(name = safeName, phone = defaultPhone, email = defaultEmail))
+    }
+
+    fun getFirstOwnerName(ownerNameStr: String?, defaultVal: String = ""): String {
+        val list = deserialize(ownerNameStr)
+        return list.firstOrNull()?.name?.ifBlank { defaultVal } ?: defaultVal
+    }
+
+    fun getFirstOwnerPhone(ownerNameStr: String?, defaultPhone: String = ""): String {
+        val list = deserialize(ownerNameStr, defaultPhone)
+        return list.firstOrNull()?.phone?.ifBlank { defaultPhone } ?: defaultPhone
+    }
+}
+
+

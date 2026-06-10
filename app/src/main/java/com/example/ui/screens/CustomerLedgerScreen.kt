@@ -1321,20 +1321,29 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(46.dp)
+                                    .heightIn(min = 58.dp)
+                                    .padding(vertical = 4.dp)
                                     .testTag("btn_broadcast_sim_sms")
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Send,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (isBn) "সরাসরি সিম থেকে অটোমেটিক এসএমএস পাঠান" else "Send Auto-SMS to All directly",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Send,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isBn) "সরাসরি সিম থেকে অটোমেটিক এসএমএস পাঠান" else "Send Auto-SMS to All directly",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 16.sp
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1480,35 +1489,35 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
 
                                                         // SMS Button
                                                         Button(
-                                                            onClick = {
-                                                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                                                    data = Uri.parse("smsto:${cust.phone}")
-                                                                    putExtra("sms_body", draftedSmsText)
-                                                                }
-                                                                try {
-                                                                    context.startActivity(intent)
-                                                                } catch (e: Exception) {
-                                                                    val fallback = Intent(Intent.ACTION_VIEW).apply {
-                                                                        type = "vnd.android-dir/mms-sms"
-                                                                        putExtra("address", cust.phone)
-                                                                        putExtra("sms_body", draftedSmsText)
-                                                                    }
-                                                                    try {
-                                                                        context.startActivity(fallback)
-                                                                    } catch (ex: Exception) {
-                                                                        viewModel.showToast(if (isBn) "মেসেঞ্জার পাওয়া যায়নি" else "SMS messenger not found")
-                                                                    }
-                                                                }
-                                                            },
-                                                            colors = ButtonDefaults.buttonColors(
-                                                                containerColor = Color(0xFF2E7D32),
-                                                                contentColor = Color.White
-                                                            ),
-                                                            shape = RoundedCornerShape(6.dp),
-                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                            modifier = Modifier.height(28.dp)
+                                                             onClick = {
+                                                                 val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                                     data = Uri.parse("smsto:${cust.phone}")
+                                                                     putExtra("sms_body", draftedSmsText)
+                                                                 }
+                                                                 try {
+                                                                     context.startActivity(intent)
+                                                                 } catch (e: Exception) {
+                                                                     val fallback = Intent(Intent.ACTION_VIEW).apply {
+                                                                         type = "vnd.android-dir/mms-sms"
+                                                                         putExtra("address", cust.phone)
+                                                                         putExtra("sms_body", draftedSmsText)
+                                                                     }
+                                                                     try {
+                                                                         context.startActivity(fallback)
+                                                                     } catch (ex: Exception) {
+                                                                         viewModel.showToast(if (isBn) "মেসেঞ্জার পাওয়া যায়নি" else "SMS messenger not found")
+                                                                     }
+                                                                 }
+                                                             },
+                                                             colors = ButtonDefaults.buttonColors(
+                                                                 containerColor = Color(0xFF2E7D32),
+                                                                 contentColor = Color.White
+                                                             ),
+                                                             shape = RoundedCornerShape(6.dp),
+                                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                             modifier = Modifier.height(28.dp)
                                                         ) {
-                                                            Text(if (isBn) "এসএমএস" else "SMS", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                             Text(if (isBn) "এসএমএস" else "SMS", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                         }
                                                     }
                                                 }
@@ -1531,7 +1540,6 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
         }
     }
 }
-
 // BULK AI SMS DATE GENERATORS AND DYNAMIC TEMPLATE DISPATCHERS
 fun sendDirectBulkSms(
     context: android.content.Context,
@@ -1642,84 +1650,153 @@ fun generateDynamicTemplate(
     isBn: Boolean
 ): String {
     val displayAmount = if (isBn) toBengaliDigits(String.format("%.1f", totalDue)) else String.format("%.1f", totalDue)
-    val location = if (address.isNullOrBlank()) {
-        if (isBn) "নির্দিষ্ট করা নেই" else "Not provided"
-    } else address
+    val locationText = if (address.isNullOrBlank() || address.trim() == "1" || address.trim() == "null") {
+        if (isBn) "ঠিকানা: সংরক্ষিত নেই" else "Address: Not specified"
+    } else {
+        if (isBn) "ঠিকানা: ${address.trim()}" else "Address: ${address.trim()}"
+    }
+
+    val cleanShopName = if (shopName.isNotBlank() && shopName.trim() != "1" && shopName.trim() != "null") {
+        shopName.trim()
+    } else {
+        if (isBn) "আমাদের প্রিয় প্রতিষ্ঠান" else "Our Store"
+    }
+
+    val owners = com.example.data.OwnerParser.deserialize(ownerName, shopPhone, "")
+    val signatureBlock = if (owners.size <= 1) {
+        val oName = owners.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: ownerName
+        val oPhone = owners.firstOrNull()?.phone?.takeIf { it.isNotBlank() } ?: shopPhone
+        if (isBn) {
+            "দোকানদার: $oName\nমোবাইল: $oPhone"
+        } else {
+            "Shopkeeper: $oName\nPhone: $oPhone"
+        }
+    } else {
+        if (isBn) {
+            val details = owners.mapIndexed { idx, owner ->
+                "মালিক ${idx + 1}: ${owner.name} (${owner.phone})"
+            }.joinToString("\n")
+            "দোকানের মালিকবৃন্দ:\n$details"
+        } else {
+            val details = owners.mapIndexed { idx, owner ->
+                "Owner ${idx + 1}: ${owner.name} (${owner.phone})"
+            }.joinToString("\n")
+            "Shop Owners:\n$details"
+        }
+    }
 
     if (isBn) {
-        return when (index % 3) {
+        return when (index % 5) {
             0 -> """
-আসসালামু আলাইকুম, সম্মানিত $customerName ভাই/বোন।
+আসসালামু আলাইকুম, সম্মানিত $customerName ভাই/বোন। ($locationText)।
 
-$shopName থেকে আশা করি ভালো আছেন। আপনার বর্তমান বকেয়া বিলের পরিমাণ হচ্ছে ৳$displayAmount (ঠিকানা: $location)।
-
-আজকের তারিখ: $todayStr। আপনার সুবিধার্থে আগামী $nextStr তারিখের মধ্যে এই বকেয়া টাকাটি পরিশোধ করার জন্য বিনীত অনুরোধ করছি। আপনার যেকোনো সমস্যায় আমরা পাশে আছি।
-
-ধন্যবাদ ও শুভেচ্ছা সহ -
-দোকানদারের নাম: $ownerName
-মোবাইল: $shopPhone
+আশা করি ভালো আছেন। অত্যন্ত আনন্দের সাথে জানাচ্ছি যে, $cleanShopName-এর সাথে আপনার পথচলা আমাদের জন্য অনেক গর্বের ও আনন্দের। আপনার হিসাব বই অনুযায়ী বর্তমান বকেয়া অ্যাকাউন্ট ব্যালেন্সটি হচ্ছে ৳$displayAmount।
+ 
+আজকের তারিখ: $todayStr। আমাদের ব্যবসা পরিচালনায় আপনার অমূল্য সহযোগিতা অব্যাহত রাখতে আগামী $nextStr তারিখের মধ্যে এই বকেয়াটি পরিশোধ করার জন্য বিনীত অনুরোধ করছি। আপনার যেকোনো প্রয়োজনে আমরা পাশে আছি।
+ 
+ধন্যবাদ ও আন্তরিক শুভেচ্ছা সহ -
+$signatureBlock
             """.trimIndent()
             
             1 -> """
-আসসালামু আলাইকুম, প্রিয় $customerName।
+আসসালামু আলাইকুম, প্রিয় $customerName সাহেব। ($locationText)।
 
-আপনার সার্বিক সুস্বাস্থ্য কামনা করছি। $shopName এ আপনার পূর্বের বকেয়া হিসাব ৳$displayAmount রয়েছে (এলাকা: $location)।
-
-অনুরোধ সাপেক্ষে বকেয়াটি আগামী $nextStr তারিখের মধ্যে পরিশোধ করার জন্য বিনীতভাবে অনুরোধ করা হলো। আজ $todayStr থেকে আপনি পরিশোধের জন্য ৭ দিন সময় পাচ্ছেন।
+আপনার ও আপনার পরিবারের উত্তরোত্তর চমৎকার সাফল্য ও সুস্বাস্থ্য কামনা করছি। $cleanShopName এ আপনার সর্বমোট বকেয়া খাতার হিসাবটি হলো ৳$displayAmount।
+ 
+আজকের তারিখ $todayStr থেকে আপনি পরিশোধের জন্য আগামী $nextStr তারিখ পর্যন্ত সুন্দর সময় পাচ্ছেন। আমাদের মিষ্টি সম্পর্ক ও পারস্পরিক বিশ্বাসের খাতিরে বকেয়াট পরিশোধ করার জন্য বিনীত তাগাদা রইলো।
 
 শুভকামনায় -
-দোকানদারের নাম: $ownerName
-ফোন: $shopPhone
+$signatureBlock
+            """.trimIndent()
+            
+            2 -> """
+আসসালামু আলাইকুম, শ্রদ্ধেয় $customerName সাহেব। ($locationText)।
+
+আমাদের মধ্যকার ব্যবসায়িক আন্তরিক সম্পর্ক ও গভীর পারস্পরিক বিশ্বাসই আমাদের পথচলার মূল চাবিকাঠি। $cleanShopName এ আপনার বর্তমান বকেয়া বিলের পরিমাণ হচ্ছে ৳$displayAmount।
+
+আজকের তারিখ $todayStr। হিসাবটি হালনাগাদ করার জন্য আমাদের পক্ষ থেকে বিশেষ শ্রদ্ধা সহকারে বিনীত নিবেদন। অনুগ্রহ করে আগামী $nextStr তারিখের মধ্যে এই বকেয়াটি পরিশোধ করবেন।
+
+আন্তরিক ধন্যবাদান্তে -
+$signatureBlock
+            """.trimIndent()
+
+            3 -> """
+আসসালামু আলাইকুম, প্রিয় সুহৃদ $customerName ভাই/বোন। ($locationText)।
+
+পরম করুণাময় আল্লাহর অশেষ রহমতে আশা করি সুস্থ ও নিরাপদে আছেন। আমাদের পরম শুভাকাঙ্ক্ষী ও নিয়মিত কাস্টমার হিসেবে আপনার বকেয়া হিসাবটির পরিমাণ হলো ৳$displayAmount (প্রতিষ্ঠান: $cleanShopName)।
+
+আজকের ডেট: $todayStr। সময়ের সাথে সাথে আমাদের সুসম্পর্ক আরও সুদৃঢ় করতে আগামী $nextStr তারিখের মধ্যে অনুগ্রহ করে বকেয়া টাকাটি পরিশোধ করার অনুরোধ করছি। আপনার সন্তুষ্টিই আমাদের লক্ষ্য।
+
+শুভেচ্ছা ও শুভকামনায় -
+$signatureBlock
             """.trimIndent()
             
             else -> """
-আসসালামু আলাইকুম, শ্রদ্ধেয় $customerName সাহেব।
+আসসালামু আলাইকুম, অত্যন্ত প্রিয় এবং সম্মানিত $customerName। ($locationText)।
 
-ব্যবসায়িক সুসম্পর্ক বজায় রাখতে আমরা সদা সচেষ্ট। $shopName এ আপনার বর্তমান বকেয়া অ্যাকাউন্ট ব্যালেন্সটি হলো ৳$displayAmount (আপনার লোকেশন: $location)।
+আপনার মতো একজন সৎ ও আন্তরিক কাস্টমার পেয়ে আমাদের $cleanShopName পরিবার সত্যিই অত্যন্ত ধন্য। হিসাব অনুযায়ী আপনার মোট বকেয়া টাকার পরিমাণ হচ্ছে ৳$displayAmount।
 
-আগামী $nextStr তারিখের মধ্যে বকেয়া পরিশোধ করার জন্য আপনাকে বিশেষ অনুরোধ জানানো হচ্ছে। উল্লেখ্য যে, আজকের তারিখ $todayStr।
+আজকের শুভ দিন: $todayStr। আপনার সুবিধাজনক সময়ে আগামী $nextStr তারিখের মধ্যে এই হিসাবটি পরিশোধ করার জন্য বিনীতভাবে অনুরোধ জানাচ্ছি। আপনার এই সুন্দর ও সময়োপযোগী সহযোগিতার উচ্ছ্বসিত প্রশংসা করি।
 
-ধন্যবাদান্তে -
-দোকানদারের নাম: $ownerName, $shopName
-কন্টাক্ট: $shopPhone
+বিনীত -
+$signatureBlock
             """.trimIndent()
         }
     } else {
-        return when (index % 3) {
+        return when (index % 5) {
             0 -> """
-Assalamu Alaikum, Dear $customerName.
+Assalamu Alaikum, Dear $customerName. ($locationText).
                 
-Hope you are doing well from $shopName. Your current outstanding balance is ৳$displayAmount (Location: $location).
+We hope this text finds you well. It is an absolute honor having you as an esteemed customer of $cleanShopName. Your current outstanding balance is ৳$displayAmount.
                 
-Today: $todayStr. We kindly request you to settle this balance by $nextStr for your convenience. We appreciate your continuation.
+Today is $todayStr. To help us serve you with the best experience, we kindly request you to settle this balance by $nextStr. Thank you for your continued cooperation.
                 
 Best regards -
-Shopkeeper: $ownerName
-Phone: $shopPhone
+$signatureBlock
             """.trimIndent()
             
             1 -> """
-Assalamu Alaikum, Dear $customerName.
+Assalamu Alaikum, Respected $customerName. ($locationText).
                 
-Wishing you good health. You have a pending credit ledger balance of ৳$displayAmount at $shopName (Area: $location).
+Wishing you and your family abundant health. We highly appreciate your mutual trust and support. Your pending ledger balance at $cleanShopName is ৳$displayAmount.
                 
-You are kindly requested to clear the balance by $nextStr. You have 7 days starting from today, $todayStr.
+You are kindly requested to clear the due by $nextStr. (Today's Date: $todayStr). Thank you for being a wonderful partner in our journey.
                 
 Respectfully -
-Shopkeeper: $ownerName
-Contact: $shopPhone
+$signatureBlock
+            """.trimIndent()
+            
+            2 -> """
+Assalamu Alaikum, Dear friend $customerName. ($locationText).
+                
+We highly value our warm and trustworthy business relation. Currently, there is an open outstanding statement balance of ৳$displayAmount recorded under your account at $cleanShopName.
+                
+Today's date is $todayStr. Please take a moment to clear this payment by $nextStr to help us keep our stock fresh and services up-to-date.
+                
+Sincerely -
+$signatureBlock
+            """.trimIndent()
+
+            3 -> """
+Assalamu Alaikum, Valued customer $customerName. ($locationText).
+                
+Hope you are having a productive and pleasant day. Our updated ledger shows a total outstanding due of ৳$displayAmount at $cleanShopName.
+                
+Today is $todayStr. We would be profoundly grateful if you could clear this balance by the upcoming deadline of $nextStr. We are always ready to assist you.
+                
+Warmest regards -
+$signatureBlock
             """.trimIndent()
             
             else -> """
-Assalamu Alaikum, Dear $customerName.
+Assalamu Alaikum, Honorable member $customerName. ($locationText).
                 
-We value our business relation. Your outstanding balance at $shopName is ৳$displayAmount (Location: $location).
+Your partnership means the world to us at $cleanShopName. Your current pending statement balance is ৳$displayAmount.
                 
-Please clear this due by $nextStr. Note that today's date is $todayStr.
+As today's date is $todayStr, we kindly and warmly remind you to clear this due by $nextStr. We appreciate your stellar promptness and constant cooperation.
                 
-Thank you -
-Shopkeeper: $ownerName, $shopName
-Phone: $shopPhone
+With appreciation -
+$signatureBlock
             """.trimIndent()
         }
     }

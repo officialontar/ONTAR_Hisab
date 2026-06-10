@@ -12,6 +12,9 @@ interface AppDao {
     @Query("SELECT * FROM users WHERE email = :identifier OR phone = :identifier LIMIT 1")
     suspend fun getUserByIdentifier(identifier: String): User?
 
+    @Query("SELECT * FROM users")
+    suspend fun getAllUsers(): List<User>
+
     @Query("SELECT * FROM users WHERE email = :rootEmail OR email LIKE :rootEmail || '#%'")
     suspend fun getAllShopsOfUser(rootEmail: String): List<User>
 

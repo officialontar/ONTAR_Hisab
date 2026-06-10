@@ -8,6 +8,8 @@ class AppRepository(private val appDao: AppDao) {
 
     suspend fun getUserByIdentifier(identifier: String): User? = appDao.getUserByIdentifier(identifier)
 
+    suspend fun getAllUsers(): List<User> = appDao.getAllUsers()
+
     suspend fun getAllShopsOfUser(rootEmail: String): List<User> = appDao.getAllShopsOfUser(rootEmail)
 
     suspend fun registerUser(user: User) = appDao.registerUser(user)

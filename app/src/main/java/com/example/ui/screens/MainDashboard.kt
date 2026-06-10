@@ -61,6 +61,32 @@ fun MainDashboard(viewModel: AppViewModel) {
     var editShopPicture by remember(user) { mutableStateOf(user?.shopPicture ?: "") }
     var editOwnerPicture by remember(user) { mutableStateOf(user?.profilePicture ?: "") }
 
+    var editOwnershipType by remember(user) {
+        val nameStr = user?.ownerName ?: ""
+        mutableStateOf(if (nameStr.trim().startsWith("[")) "joint" else "single")
+    }
+    
+    val initialOwners = remember(user) {
+        com.example.data.OwnerParser.deserialize(user?.ownerName, user?.phone ?: "", user?.email ?: "")
+    }
+
+    var editJointCount by remember(initialOwners) {
+        mutableStateOf(if (initialOwners.size >= 3) 3 else 2)
+    }
+
+    var editJointName1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.name ?: "") }
+    var editJointPhone1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.phone ?: "") }
+    var editJointEmail1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.email ?: "") }
+
+    var editJointName2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.name ?: "") }
+    var editJointPhone2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.phone ?: "") }
+    var editJointEmail2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.email ?: "") }
+
+    var editJointName3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.name ?: "") }
+    var editJointPhone3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.phone ?: "") }
+    var editJointEmail3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.email ?: "") }
+
+
     val editShopLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -293,35 +319,296 @@ fun MainDashboard(viewModel: AppViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Owner Name Input
-                    OutlinedTextField(
-                        value = editOwnerName,
-                        onValueChange = { editOwnerName = it },
-                        label = { Text(Translator.get("owner_name", isBn)) },
-                        leadingIcon = { Icon(Icons.Default.Person, null) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Ownership Type Selection Row
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isBn) "দোকানের মালিকানার ধরন:" else "Ownership Type:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (editOwnershipType == "single") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { editOwnershipType = "single" }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isBn) "একক মালিক (১)" else "Single Owner (1)",
+                                    color = if (editOwnershipType == "single") colors.onPrimary else colors.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (editOwnershipType == "joint") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { editOwnershipType = "joint" }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isBn) "যৌথ মালিক (>১)" else "Joint Owners (>1)",
+                                    color = if (editOwnershipType == "joint") colors.onPrimary else colors.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
 
-                    // Phone Number Input
-                    OutlinedTextField(
-                        value = editPhone,
-                        onValueChange = { editPhone = it },
-                        label = { Text(Translator.get("phone_number", isBn)) },
-                        leadingIcon = { Icon(Icons.Default.Phone, null) },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (editOwnershipType == "joint") {
+                        // Joint Owner count selector
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        ) {
+                            Text(
+                                text = if (isBn) "মালিকের সংখ্যা:" else "Number of Owners:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.secondary,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editJointCount == 2) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                        .clickable { editJointCount = 2 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isBn) "২ জন অংশীদার" else "2 Partners",
+                                        color = if (editJointCount == 2) colors.onSecondary else colors.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editJointCount == 3) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                        .clickable { editJointCount = 3 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isBn) "৩ জন অংশীদার" else "3 Partners",
+                                        color = if (editJointCount == 3) colors.onSecondary else colors.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
 
-                    // Email Input (Now fully editable!)
+                        // Render Joint Owner 1 Card info
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = colors.surface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (isBn) "প্রথম মালিকের তথ্য (Owner 1):" else "Owner 1 Details:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = editJointName1,
+                                    onValueChange = { editJointName1 = it },
+                                    label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                    leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointPhone1,
+                                    onValueChange = { editJointPhone1 = it },
+                                    label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                    leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointEmail1,
+                                    onValueChange = { editJointEmail1 = it },
+                                    label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                    leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Render Joint Owner 2 Card info
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = colors.surface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (isBn) "দ্বিতীয় মালিকের তথ্য (Owner 2):" else "Owner 2 Details:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = editJointName2,
+                                    onValueChange = { editJointName2 = it },
+                                    label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                    leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointPhone2,
+                                    onValueChange = { editJointPhone2 = it },
+                                    label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                    leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointEmail2,
+                                    onValueChange = { editJointEmail2 = it },
+                                    label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                    leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        if (editJointCount == 3) {
+                            // Render Joint Owner 3 Card info
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = if (isBn) "তৃতীয় মালিকের তথ্য (Owner 3):" else "Owner 3 Details:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = editJointName3,
+                                        onValueChange = { editJointName3 = it },
+                                        label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                        leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = editJointPhone3,
+                                        onValueChange = { editJointPhone3 = it },
+                                        label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                        leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = editJointEmail3,
+                                        onValueChange = { editJointEmail3 = it },
+                                        label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                        leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Owner Name Input
+                        OutlinedTextField(
+                            value = editOwnerName,
+                            onValueChange = { editOwnerName = it },
+                            label = { Text(Translator.get("owner_name", isBn)) },
+                            leadingIcon = { Icon(Icons.Default.Person, null) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Phone Number Input
+                        OutlinedTextField(
+                            value = editPhone,
+                            onValueChange = { editPhone = it },
+                            label = { Text(Translator.get("phone_number", isBn)) },
+                            leadingIcon = { Icon(Icons.Default.Phone, null) },
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Primary Email Input (Always visible and editable for both Single and Joint Owners!)
                     OutlinedTextField(
                         value = editEmail,
                         onValueChange = { editEmail = it },
                         label = { Text(Translator.get("login_email", isBn)) },
                         leadingIcon = { Icon(Icons.Default.Email, null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Security PIN Input (Always visible and editable for both Single and Joint Owners!)
+                    OutlinedTextField(
+                        value = editPin,
+                        onValueChange = { if (it.length <= 6) editPin = it },
+                        label = { Text(Translator.get("register_pin", isBn)) },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -547,11 +834,33 @@ fun MainDashboard(viewModel: AppViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
+                        val finalOwnerName: String
+                        val finalPhone: String
+
+                        if (editOwnershipType == "single") {
+                            finalOwnerName = editOwnerName
+                            finalPhone = editPhone
+                        } else {
+                            if (editJointName1.isBlank() || editJointPhone1.isBlank() || editJointName2.isBlank() || editJointPhone2.isBlank() || (editJointCount == 3 && (editJointName3.isBlank() || editJointPhone3.isBlank()))) {
+                                viewModel.showToast(if (isBn) "দয়া করে অংশীদারদের নাম এবং মোবাইল নাম্বার সবগুলো পূরণ করুন" else "Please fill name and mobile numbers of all partners")
+                                return@Button
+                            }
+
+                            val list = mutableListOf<com.example.data.OwnerInfo>()
+                            list.add(com.example.data.OwnerInfo(editJointName1.trim(), editJointPhone1.trim(), editJointEmail1.trim()))
+                            list.add(com.example.data.OwnerInfo(editJointName2.trim(), editJointPhone2.trim(), editJointEmail2.trim()))
+                            if (editJointCount == 3) {
+                                list.add(com.example.data.OwnerInfo(editJointName3.trim(), editJointPhone3.trim(), editJointEmail3.trim()))
+                            }
+                            finalOwnerName = com.example.data.OwnerParser.serialize(list)
+                            finalPhone = list.map { it.phone }.filter { it.isNotBlank() }.joinToString(", ")
+                        }
+
                         viewModel.updateUserProfile(
                             shopName = editShopName,
-                            ownerName = editOwnerName,
-                            email = editEmail,
-                            phone = editPhone,
+                            ownerName = finalOwnerName,
+                            email = editEmail.trim(),
+                            phone = finalPhone,
                             pin = editPin,
                             profilePic = editOwnerPicture.ifBlank { null },
                             shopPic = editShopPicture.ifBlank { null }
@@ -636,7 +945,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = (user?.ownerName?.take(1) ?: "U").uppercase(),
+                                    text = (com.example.data.OwnerParser.getFirstOwnerName(user?.ownerName, "U").take(1).ifBlank { "U" }).uppercase(),
                                     fontWeight = FontWeight.Bold,
                                     color = colors.primary,
                                     fontSize = 16.sp
@@ -648,7 +957,7 @@ fun MainDashboard(viewModel: AppViewModel) {
 
                         Column {
                             val shopTitle = user?.shopName ?: Translator.get("app_title", isBn)
-                            val ownerTitle = user?.ownerName ?: (if (isBn) "দোকানের মালিক" else "Shop Owner")
+                            val ownerTitle = com.example.data.OwnerParser.getFirstOwnerName(user?.ownerName, if (isBn) "দোকানের মালিক" else "Shop Owner")
                             Text(
                                 text = ownerTitle,
                                 style = MaterialTheme.typography.titleSmall,

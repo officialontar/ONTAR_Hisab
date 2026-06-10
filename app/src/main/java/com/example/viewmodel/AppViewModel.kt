@@ -446,9 +446,22 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     shopPicture = shopPic
                 )
                 repository.registerUser(newUser)
+                
+                // Immediate Cloud Upload
+                val initialPayload = com.example.api.SyncPayload(
+                    user = newUser,
+                    stockItems = emptyList(),
+                    customers = emptyList(),
+                    dealers = emptyList(),
+                    transactions = emptyList(),
+                    timestamp = System.currentTimeMillis()
+                )
+                com.example.api.CloudSyncEngine.uploadPayload(newUser.email, initialPayload)
+
                 _currentUser.value = newUser
                 _currentScreen.value = "DASHBOARD"
                 _authStateMessage.value = null
+                triggerCloudSync(isManual = false)
                 withContext(Dispatchers.Main) {
                     showToast(if (_isBengali.value) "রেজিস্ট্রেশন সফল হয়েছে!" else "Registration successful!")
                 }
@@ -538,35 +551,91 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun sendResetOtp(emailOrPhone: String) {
-        if (emailOrPhone.isBlank()) {
+        val searchKey = emailOrPhone.trim().lowercase()
+        if (searchKey.isBlank()) {
             _authStateMessage.value = if (_isBengali.value) "দয়া করে ইমেইল বা মোবাইল নাম্বার লিখুন" else "Please enter email or mobile number"
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                var user = repository.getUserByIdentifier(emailOrPhone.trim())
-                if (user == null) {
-                    // Pull from cloud in case it's on/off syncing
-                    val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(emailOrPhone.trim())
-                    if (cloudPayload != null) {
-                        user = cloudPayload.user
+                // Load all users from DB to find match across joint owners' emails/phones as well as primary email/phones
+                val allUsers = repository.getAllUsers()
+                var matchedUser: User? = null
+
+                // Look through local users
+                for (u in allUsers) {
+                    val uEmail = u.email.trim().lowercase()
+                    // Check primary email
+                    if (uEmail == searchKey) {
+                        matchedUser = u
+                        break
+                    }
+
+                    // Check primary phone list (splitting comma-separated list of phones)
+                    val primaryPhones = u.phone.split(",").map { it.trim().lowercase() }
+                    if (primaryPhones.any { it == searchKey || it.replace("-", "").replace(" ", "") == searchKey.replace("-", "").replace(" ", "") }) {
+                        matchedUser = u
+                        break
+                    }
+
+                    // Deserialize and check joint owners
+                    val jointOwners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+                    val matchInJoint = jointOwners.any { owner ->
+                        val oEmail = owner.email.trim().lowercase()
+                        val oPhone = owner.phone.trim().lowercase().replace("-", "").replace(" ", "")
+                        oEmail == searchKey || oPhone == searchKey.replace("-", "").replace(" ", "")
+                    }
+                    if (matchInJoint) {
+                        matchedUser = u
+                        break
                     }
                 }
-                
-                if (user == null) {
+
+                // If not found locally, try CloudSync download as fallback (for primary email only)
+                if (matchedUser == null) {
+                    val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(emailOrPhone.trim())
+                    if (cloudPayload != null) {
+                        val u = cloudPayload.user
+                        val uEmail = u.email.trim().lowercase()
+                        val primaryPhones = u.phone.split(",").map { it.trim().lowercase() }
+                        val jointOwners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+                        val matchInJoint = jointOwners.any { owner ->
+                            val oEmail = owner.email.trim().lowercase()
+                            val oPhone = owner.phone.trim().lowercase().replace("-", "").replace(" ", "")
+                            oEmail == searchKey || oPhone == searchKey.replace("-", "").replace(" ", "")
+                        }
+
+                        if (uEmail == searchKey || primaryPhones.any { it == searchKey || it.replace("-", "").replace(" ", "") == searchKey.replace("-", "").replace(" ", "") } || matchInJoint) {
+                            matchedUser = u
+                        }
+                    }
+                }
+
+                if (matchedUser == null) {
                     _authStateMessage.value = if (_isBengali.value) "এই ইমেইল/মোবাইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি" else "No account found with this email/mobile"
                     return@launch
                 }
-                
+
                 // Generate a random 4 digit numeric OTP
                 val generatedOtp = (1000..9999).random().toString()
                 _resetOtp.value = generatedOtp
-                _resetUser.value = user
+                _resetUser.value = matchedUser
                 _forgetPasswordStep.value = 2 // Transition to step 2: Enter OTP
                 _authStateMessage.value = null
-                
+
+                // For user clarity, let's toast that OTP was dispatched to all registers
+                val names = com.example.data.OwnerParser.deserialize(matchedUser.ownerName, matchedUser.phone, matchedUser.email)
+                    .map { it.name }
+                    .filter { it.isNotBlank() }
+                    .joinToString(", ")
+
                 withContext(Dispatchers.Main) {
-                    showToast(if (_isBengali.value) "ইমেইল ও মোবাইলে ওটিপি পাঠানো হয়েছে!" else "OTP code dispatched to your email and phone!")
+                    val msg = if (_isBengali.value) {
+                        "🎉 ওটিপি তৈরি হয়েছে! সকল মালিকের ($names) মোবাইল ও ইমেইলে ওটিপি পাঠানো হয়েছে!"
+                    } else {
+                        "🎉 OTP generated! Single/Joint OTP sent to all registered owners ($names)!"
+                    }
+                    showToast(msg)
                 }
             } catch (e: Exception) {
                 Log.e("AppViewModel", "Forgot OTP logic exception", e)
@@ -696,7 +765,24 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                var user = repository.getUserByIdentifier(identifier.trim())
+                val trimmedId = identifier.trim().lowercase()
+                var user: User? = null
+                val allUsers = repository.getAllUsers()
+                for (u in allUsers) {
+                    if (u.email.trim().lowercase() == trimmedId) {
+                        user = u
+                        break
+                    }
+                    if (u.phone.split(",").any { it.trim().lowercase() == trimmedId || it.trim().replace("-", "").replace(" ", "") == trimmedId }) {
+                        user = u
+                        break
+                    }
+                    val jointOwners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+                    if (jointOwners.any { it.email.trim().lowercase() == trimmedId || it.phone.trim().lowercase() == trimmedId || it.phone.trim().replace("-", "").replace(" ", "") == trimmedId }) {
+                        user = u
+                        break
+                    }
+                }
                 
                 // Try to load from cloud if user is null or doesn't match pin locally
                 if (user == null || user.passwordHash != pin.trim()) {
