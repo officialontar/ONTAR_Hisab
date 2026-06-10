@@ -94,6 +94,75 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
         }
     }
 
+    var contactPickTarget by remember { mutableStateOf<String?>(null) } // "ADD" or "EDIT"
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val cr = context.contentResolver
+                var name = ""
+                var phone = ""
+                cr.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            name = cursor.getString(nameIndex) ?: ""
+                        }
+                        val hasPhoneIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                        val hasPhone = if (hasPhoneIndex != -1) cursor.getInt(hasPhoneIndex) > 0 else false
+                        if (hasPhone) {
+                            val idIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
+                            if (idIndex != -1) {
+                                val idStr = cursor.getString(idIndex)
+                                cr.query(
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                                    null,
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
+                                    arrayOf(idStr),
+                                    null
+                                )?.use { phoneCursor ->
+                                    if (phoneCursor.moveToFirst()) {
+                                        val pIndex = phoneCursor.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                        if (pIndex != -1) {
+                                            phone = phoneCursor.getString(pIndex) ?: ""
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                val cleanedPhone = phone.replace(Regex("[\\s\\-\\(\\)]"), "")
+                if (contactPickTarget == "ADD") {
+                    if (name.isNotEmpty()) {
+                        dealerName = name
+                    }
+                    if (cleanedPhone.isNotEmpty()) {
+                        dealerPhone = cleanedPhone
+                    }
+                } else if (contactPickTarget == "EDIT") {
+                    if (name.isNotEmpty()) {
+                        editDealerName = name
+                    }
+                    if (cleanedPhone.isNotEmpty()) {
+                        editDealerPhone = cleanedPhone
+                    }
+                }
+            } catch (e: Exception) {
+                viewModel.showToast(if (isBn) "কন্টাক্ট রিড করতে সমস্যা হয়েছে! পারমিশন দিন।" else "Error reading contacts!")
+            }
+        }
+    }
+
+    val contactPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // Launch picker regardless
+        contactPickerLauncher.launch(null)
+    }
+
     // Dues interaction triggers
     var selectedDealerForPayout by remember { mutableStateOf<Dealer?>(null) }
     var payoutAmountText by remember { mutableStateOf("") }
@@ -274,6 +343,37 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     title = { Text(Translator.get("add_dealer", isBn), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
+                            Button(
+                                onClick = {
+                                    contactPickTarget = "ADD"
+                                    contactPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary.copy(alpha = 0.08f),
+                                    contentColor = colors.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBox,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "ফোনবুক/কন্টাক্ট থেকে সিলেক্ট করুন" else "Select from Phonebook/Contacts",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             OutlinedTextField(
                                 value = dealerName,
                                 onValueChange = { dealerName = it },
@@ -441,6 +541,37 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     title = { Text(if (isBn) "ডিলারের প্রোফাইল সম্পাদন" else "Edit Supplier Profile", fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
+                            Button(
+                                onClick = {
+                                    contactPickTarget = "EDIT"
+                                    contactPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary.copy(alpha = 0.08f),
+                                    contentColor = colors.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBox,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "ফোনবুক/কন্টাক্ট থেকে সিলেক্ট করুন" else "Select from Phonebook/Contacts",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             OutlinedTextField(
                                 value = editDealerName,
                                 onValueChange = { editDealerName = it },
@@ -1175,70 +1306,92 @@ fun DealerRecordCard(
             // Dealer actions row 2: AI utilities & profiling (Edit/Delete)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Gemini AI SMS Draft (Left aligned)
-                if (dealer.totalOwed != 0.0) {
+                val hasSms = dealer.totalOwed != 0.0 && dealer.phone.isNotBlank()
+                
+                // 1. AI SMS Option (Takes proportional weight if available)
+                if (hasSms) {
                     Button(
                         onClick = onRemindClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.08f), contentColor = colors.primary),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary.copy(alpha = 0.08f),
+                            contentColor = colors.primary
+                        ),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                         modifier = Modifier
-                            .height(34.dp)
+                            .height(36.dp)
+                            .weight(1.2f)
                             .testTag("btn_trigger_ai_sms_dealer_${dealer.name.replace(" ", "_")}")
                     ) {
-                        Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp))
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isBn) "এআই এসএমএস" else "AI SMS Draft",
+                            text = if (isBn) "এআই এসএমএস" else "AI SMS",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                // Profile maintenance on right side
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // 2. Edit Profile Option (Always in the middle point)
+                Button(
+                    onClick = onEditClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary.copy(alpha = 0.08f),
+                        contentColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .weight(1f)
+                        .testTag("btn_edit_dealer_${dealer.id}")
                 ) {
-                    // Edit Profile option
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.primary.copy(alpha = 0.08f))
-                            .testTag("btn_edit_dealer_${dealer.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit profile",
-                            tint = colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Profile",
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isBn) "এডিট" else "Edit",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-                    // Delete dealer option
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.error.copy(alpha = 0.08f))
-                            .testTag("btn_delete_dealer_${dealer.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = colors.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                // 3. Delete Option (Placed on the right end)
+                Button(
+                    onClick = onDeleteClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.error.copy(alpha = 0.08f),
+                        contentColor = colors.error
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .weight(1f)
+                        .testTag("btn_delete_dealer_${dealer.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Supplier",
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isBn) "ডিলিট" else "Delete",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

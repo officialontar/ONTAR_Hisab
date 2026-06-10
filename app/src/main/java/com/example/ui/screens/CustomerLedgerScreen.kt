@@ -2,12 +2,19 @@ package com.example.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -28,8 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.AppViewModel
 import com.example.data.Customer
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,10 +42,42 @@ import android.net.Uri
 fun CustomerLedgerScreen(viewModel: AppViewModel) {
     val isBn by viewModel.isBengali.collectAsState()
     val customersList by viewModel.customers.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
     val colors = MaterialTheme.colorScheme
+
+    var showBulkSmsDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+
+    val eligibleCustomersForSms = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
+    val (smsTodayStr, smsNextStr) = getSmsDates(isBn)
+    val smsShopName = currentUser?.shopName ?: if (isBn) "আমার দোকান" else "My Shop"
+    val smsShopPhone = currentUser?.phone ?: ""
+    val smsOwnerName = currentUser?.ownerName ?: ""
+
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            sendDirectBulkSms(
+                context = context,
+                customers = eligibleCustomersForSms,
+                isBn = isBn,
+                todayStr = smsTodayStr,
+                nextStr = smsNextStr,
+                shopName = smsShopName,
+                shopPhone = smsShopPhone,
+                ownerName = smsOwnerName,
+                viewModel = viewModel
+            )
+        } else {
+            viewModel.showToast(
+                if (isBn) "সরাসরি সিম থেকে অটো এসএমএস পাঠানোর জন্য অনুমতি প্রয়োজন!" 
+                else "Permission is required to send direct cellular SMS!"
+            )
+        }
+    }
 
     // Dialog form triggers
     var showAddCustomerDialog by remember { mutableStateOf(false) }
@@ -88,6 +125,75 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
         if (uri != null) {
             editCustomerPhotoUri = uri.toString()
         }
+    }
+
+    var contactPickTarget by remember { mutableStateOf<String?>(null) } // "ADD" or "EDIT"
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickContact()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val cr = context.contentResolver
+                var name = ""
+                var phone = ""
+                cr.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            name = cursor.getString(nameIndex) ?: ""
+                        }
+                        val hasPhoneIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                        val hasPhone = if (hasPhoneIndex != -1) cursor.getInt(hasPhoneIndex) > 0 else false
+                        if (hasPhone) {
+                            val idIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
+                            if (idIndex != -1) {
+                                val idStr = cursor.getString(idIndex)
+                                cr.query(
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                                    null,
+                                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
+                                    arrayOf(idStr),
+                                    null
+                                )?.use { phoneCursor ->
+                                    if (phoneCursor.moveToFirst()) {
+                                        val pIndex = phoneCursor.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                        if (pIndex != -1) {
+                                            phone = phoneCursor.getString(pIndex) ?: ""
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                val cleanedPhone = phone.replace(Regex("[\\s\\-\\(\\)]"), "")
+                if (contactPickTarget == "ADD") {
+                    if (name.isNotEmpty()) {
+                        customerName = name
+                    }
+                    if (cleanedPhone.isNotEmpty()) {
+                        customerPhone = cleanedPhone
+                    }
+                } else if (contactPickTarget == "EDIT") {
+                    if (name.isNotEmpty()) {
+                        editCustomerName = name
+                    }
+                    if (cleanedPhone.isNotEmpty()) {
+                        editCustomerPhone = cleanedPhone
+                    }
+                }
+            } catch (e: Exception) {
+                viewModel.showToast(if (isBn) "কন্টাক্ট রিড করতে সমস্যা হয়েছে! পারমিশন দিন।" else "Error reading contacts!")
+            }
+        }
+    }
+
+    val contactPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // Launch picker regardless
+        contactPickerLauncher.launch(null)
     }
 
     var selectedCustomerForHistory by remember { mutableStateOf<Customer?>(null) }
@@ -225,6 +331,84 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
+                        item {
+                            val eligibleCustomers = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
+                            if (eligibleCustomers.isNotEmpty()) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .testTag("bulk_sms_banner_card"),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colors.primary.copy(alpha = 0.06f)
+                                    ),
+                                    border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.15f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1.0f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colors.primary.copy(alpha = 0.12f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Email,
+                                                    contentDescription = null,
+                                                    tint = colors.primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = if (isBn) "স্মার্ট এআই বাল্ক মেসেজিং" else "Smart AI Bulk Reminder",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = colors.primary
+                                                )
+                                                Text(
+                                                    text = if (isBn) "${eligibleCustomers.size} জন কাস্টমারকে বকেয়া তাগাদা দিন" else "Remind ${eligibleCustomers.size} customers at once",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = colors.onBackground.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
+                                        
+                                        Button(
+                                            onClick = { showBulkSmsDialog = true },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = colors.primary,
+                                                contentColor = colors.onPrimary
+                                            ),
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                            modifier = Modifier.height(36.dp).testTag("btn_open_bulk_sms")
+                                        ) {
+                                            Icon(Icons.Default.Send, null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = if (isBn) "তাগাদা দিন" else "Remind",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         items(filteredCustomers) { customer ->
                             CustomerRecordCard(
                                 customer = customer,
@@ -273,6 +457,37 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     title = { Text(Translator.get("add_customer", isBn), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
+                            Button(
+                                onClick = {
+                                    contactPickTarget = "ADD"
+                                    contactPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary.copy(alpha = 0.08f),
+                                    contentColor = colors.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBox,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "ফোনবুক/কন্টাক্ট থেকে সিলেক্ট করুন" else "Select from Phonebook/Contacts",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             OutlinedTextField(
                                 value = customerName,
                                 onValueChange = { customerName = it },
@@ -439,6 +654,37 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     title = { Text(if (isBn) "কাস্টমার প্রোফাইল সম্পাদন" else "Edit Customer Profile", fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
+                            Button(
+                                onClick = {
+                                    contactPickTarget = "EDIT"
+                                    contactPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colors.primary.copy(alpha = 0.08f),
+                                    contentColor = colors.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBox,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = colors.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "ফোনবুক/কন্টাক্ট থেকে সিলেক্ট করুন" else "Select from Phonebook/Contacts",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             OutlinedTextField(
                                 value = editCustomerName,
                                 onValueChange = { editCustomerName = it },
@@ -971,6 +1217,510 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     }
                 )
             }
+
+            // SMART BULK AI SMS MESSAGING CENTER DIALOG
+            if (showBulkSmsDialog) {
+                val eligibleCustomers = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
+                val (todayStr, nextStr) = getSmsDates(isBn)
+                val shopName = currentUser?.shopName ?: if (isBn) "আমার দোকান" else "My Shop"
+                val shopPhone = currentUser?.phone ?: ""
+                val ownerName = currentUser?.ownerName ?: ""
+
+                AlertDialog(
+                    onDismissRequest = { showBulkSmsDialog = false },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Send, null, tint = colors.primary, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isBn) "এআই বাল্ক মেসেজিং সেন্টার" else "AI Bulk Messaging Center",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    },
+                    text = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = if (isBn) "আজকের ও পরবর্তী ৭ দিনের তারিখ অনুযায়ী প্রত্যেক গ্রাহকের জন্য আলাদা আলাদা মিষ্টি তাগাদা তৈরি করা হয়েছে।" 
+                                else "Unique polite debt reminders have been automatically drafted for each customer based on today and next 7-days window.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onBackground.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.primary.copy(alpha = 0.05f))
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = if (isBn) "বর্তমান তারিখ: $todayStr" else "Current Date: $todayStr",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.primary
+                                    )
+                                    Text(
+                                        text = if (isBn) "পরিশোধের শেষ তারিখ: $nextStr" else "Deadline Date: $nextStr",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFD32F2F)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colors.primary.copy(alpha = 0.12f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isBn) "৭ দিন সময়" else "7 Days Period",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Black,
+                                        color = colors.primary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            // ⚡ AUTOMATIC BROADCAST SIM CARRIER SMS BUTTON
+                            Button(
+                                onClick = {
+                                    val hasSmsPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.SEND_SMS
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                    if (hasSmsPermission) {
+                                        sendDirectBulkSms(
+                                            context = context,
+                                            customers = eligibleCustomers,
+                                            isBn = isBn,
+                                            todayStr = todayStr,
+                                            nextStr = nextStr,
+                                            shopName = shopName,
+                                            shopPhone = shopPhone,
+                                            ownerName = ownerName,
+                                            viewModel = viewModel
+                                        )
+                                    } else {
+                                        smsPermissionLauncher.launch(android.Manifest.permission.SEND_SMS)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2E7D32),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
+                                    .testTag("btn_broadcast_sim_sms")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Send,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "সরাসরি সিম থেকে অটোমেটিক এসএমএস পাঠান" else "Send Auto-SMS to All directly",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = if (isBn) "ℹ️ এটি আপনার ফোনের নিজস্ব সিম এবং স্বাভাবিক এসএমএস ব্যালেন্স ব্যবহার করে সরাসরি ১ সেকেন্ডে সবার ফোনে আলাদা আলাদা মিষ্টি বকেয়া তাগাদা মেসেজ পাঠিয়ে দেবে।"
+                                else "ℹ️ This leverages your phone's own cellular SIM card's regular carrier SMS plan to send customized polite debt reminders in 1 second.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onBackground.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            if (eligibleCustomers.isEmpty()) {
+                                Text(
+                                    text = if (isBn) "বাকি পরিশোধের তাগাদা পাঠানোর মতো কোনো সক্রিয় কাস্টমার নেই।" else "No active customers with unpaid dues to remind.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.onBackground.copy(alpha = 0.4f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+                                )
+                            } else {
+                                Box(modifier = Modifier.heightIn(max = 350.dp)) {
+                                    LazyColumn(
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        itemsIndexed(eligibleCustomers) { idx, cust ->
+                                            val draftedSmsText = generateDynamicTemplate(
+                                                index = idx,
+                                                customerName = cust.name,
+                                                totalDue = cust.totalDue,
+                                                address = cust.address,
+                                                todayStr = todayStr,
+                                                nextStr = nextStr,
+                                                shopName = shopName,
+                                                shopPhone = shopPhone,
+                                                ownerName = ownerName,
+                                                isBn = isBn
+                                            )
+
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.5f)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, colors.onSurface.copy(alpha = 0.08f)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column {
+                                                            Text(
+                                                                text = cust.name,
+                                                                fontWeight = FontWeight.Black,
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                color = colors.onSurface
+                                                            )
+                                                            Text(
+                                                                text = cust.phone,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = colors.onSurface.copy(alpha = 0.5f)
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = "৳ ${if (isBn) toBengaliDigits(String.format("%.1f", cust.totalDue)) else String.format("%.1f", cust.totalDue)}",
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = Color(0xFFD32F2F)
+                                                        )
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                                    Text(
+                                                        text = draftedSmsText,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontSize = 11.sp,
+                                                        color = colors.onSurface.copy(alpha = 0.8f),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(colors.background)
+                                                            .padding(8.dp)
+                                                    )
+
+                                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        // Copy Button
+                                                        Button(
+                                                            onClick = {
+                                                                clipboardManager.setText(AnnotatedString(draftedSmsText))
+                                                                viewModel.showToast(
+                                                                    if (isBn) "${cust.name}-এর বার্তা কপি হয়েছে!" else "Copied ${cust.name}'s message!"
+                                                                )
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = colors.primary.copy(alpha = 0.08f),
+                                                                contentColor = colors.primary
+                                                            ),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Text(if (isBn) "কপি" else "Copy", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        }
+
+                                                        // WhatsApp Button
+                                                        Button(
+                                                            onClick = {
+                                                                var cleanPhone = cust.phone.replace("+", "").replace(" ", "").replace("-", "")
+                                                                if (!cleanPhone.startsWith("88") && cleanPhone.length == 11) {
+                                                                    cleanPhone = "88$cleanPhone"
+                                                                }
+                                                                val url = "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(draftedSmsText)}"
+                                                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                                    data = Uri.parse(url)
+                                                                }
+                                                                try {
+                                                                    context.startActivity(intent)
+                                                                } catch (e: Exception) {
+                                                                    viewModel.showToast(if (isBn) "হোয়াটসঅ্যাপ অ্যাপ পাওয়া যায়নি" else "WhatsApp not installed")
+                                                                }
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = Color(0xFF25D366),
+                                                                contentColor = Color.White
+                                                            ),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Text(if (isBn) "হোয়াটসঅ্যাপ" else "WhatsApp", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        }
+
+                                                        // SMS Button
+                                                        Button(
+                                                            onClick = {
+                                                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                                    data = Uri.parse("smsto:${cust.phone}")
+                                                                    putExtra("sms_body", draftedSmsText)
+                                                                }
+                                                                try {
+                                                                    context.startActivity(intent)
+                                                                } catch (e: Exception) {
+                                                                    val fallback = Intent(Intent.ACTION_VIEW).apply {
+                                                                        type = "vnd.android-dir/mms-sms"
+                                                                        putExtra("address", cust.phone)
+                                                                        putExtra("sms_body", draftedSmsText)
+                                                                    }
+                                                                    try {
+                                                                        context.startActivity(fallback)
+                                                                    } catch (ex: Exception) {
+                                                                        viewModel.showToast(if (isBn) "মেসেঞ্জার পাওয়া যায়নি" else "SMS messenger not found")
+                                                                    }
+                                                                }
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = Color(0xFF2E7D32),
+                                                                contentColor = Color.White
+                                                            ),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Text(if (isBn) "এসএমএস" else "SMS", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { showBulkSmsDialog = false }
+                        ) {
+                            Text(if (isBn) "বন্ধ করুন" else "Close")
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+// BULK AI SMS DATE GENERATORS AND DYNAMIC TEMPLATE DISPATCHERS
+fun sendDirectBulkSms(
+    context: android.content.Context,
+    customers: List<com.example.data.Customer>,
+    isBn: Boolean,
+    todayStr: String,
+    nextStr: String,
+    shopName: String,
+    shopPhone: String,
+    ownerName: String,
+    viewModel: com.example.viewmodel.AppViewModel
+) {
+    try {
+        val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            context.getSystemService(android.telephony.SmsManager::class.java)!!
+        } else {
+            @Suppress("DEPRECATION")
+            android.telephony.SmsManager.getDefault()
+        }
+
+        var successCount = 0
+        var failCount = 0
+
+        customers.forEachIndexed { idx, cust ->
+            val draftedSmsText = generateDynamicTemplate(
+                index = idx,
+                customerName = cust.name,
+                totalDue = cust.totalDue,
+                address = cust.address,
+                todayStr = todayStr,
+                nextStr = nextStr,
+                shopName = shopName,
+                shopPhone = shopPhone,
+                ownerName = ownerName,
+                isBn = isBn
+            )
+
+            val cleanPhone = cust.phone.replace(" ", "").replace("-", "")
+            if (cleanPhone.isNotEmpty()) {
+                try {
+                    val parts = smsManager.divideMessage(draftedSmsText)
+                    smsManager.sendMultipartTextMessage(cleanPhone, null, parts, null, null)
+                    successCount++
+                } catch (e: Exception) {
+                    failCount++
+                }
+            } else {
+                failCount++
+            }
+        }
+
+        if (failCount == 0) {
+            viewModel.showToast(
+                if (isBn) "🎉 সফলভাবে সকল $successCount জন কাস্টমারকে সরাসরি এসএমএস পাঠানো হয়েছে!"
+                else "🎉 Successfully sent direct cellular SMS to all $successCount customers!"
+            )
+        } else {
+            viewModel.showToast(
+                if (isBn) "সাফল্য: $successCount, ব্যর্থতা: $failCount। অনুগ্রহ করে চেক করুন।"
+                else "Sent: $successCount, Failed: $failCount. Please inspect balances."
+            )
+        }
+    } catch (e: Exception) {
+        viewModel.showToast(
+            if (isBn) "এসএমএস পাঠাতে সমস্যা তৈরি হয়েছে: ${e.localizedMessage}"
+            else "SMS Send failed: ${e.localizedMessage}"
+        )
+    }
+}
+
+fun getSmsDates(isBn: Boolean): Pair<String, String> {
+    val cal = java.util.Calendar.getInstance()
+    val todayDate = cal.time
+    cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+    val nextSevenDaysDate = cal.time
+    
+    val format = java.text.SimpleDateFormat("dd-MM-yyyy", java.util.Locale.getDefault())
+    val todayStr = format.format(todayDate)
+    val nextStr = format.format(nextSevenDaysDate)
+    
+    return if (isBn) {
+        Pair(toBengaliDigits(todayStr), toBengaliDigits(nextStr))
+    } else {
+        Pair(todayStr, nextStr)
+    }
+}
+
+fun toBengaliDigits(input: String): String {
+    val englishDigits = listOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+    val bengaliDigits = listOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+    var result = input
+    englishDigits.forEachIndexed { index, char ->
+        result = result.replace(char, bengaliDigits[index])
+    }
+    return result
+}
+
+fun generateDynamicTemplate(
+    index: Int,
+    customerName: String,
+    totalDue: Double,
+    address: String?,
+    todayStr: String,
+    nextStr: String,
+    shopName: String,
+    shopPhone: String,
+    ownerName: String,
+    isBn: Boolean
+): String {
+    val displayAmount = if (isBn) toBengaliDigits(String.format("%.1f", totalDue)) else String.format("%.1f", totalDue)
+    val location = if (address.isNullOrBlank()) {
+        if (isBn) "নির্দিষ্ট করা নেই" else "Not provided"
+    } else address
+
+    if (isBn) {
+        return when (index % 3) {
+            0 -> """
+আসসালামু আলাইকুম, সম্মানিত $customerName ভাই/বোন।
+
+$shopName থেকে আশা করি ভালো আছেন। আপনার বর্তমান বকেয়া বিলের পরিমাণ হচ্ছে ৳$displayAmount (ঠিকানা: $location)।
+
+আজকের তারিখ: $todayStr। আপনার সুবিধার্থে আগামী $nextStr তারিখের মধ্যে এই বকেয়া টাকাটি পরিশোধ করার জন্য বিনীত অনুরোধ করছি। আপনার যেকোনো সমস্যায় আমরা পাশে আছি।
+
+ধন্যবাদ ও শুভেচ্ছা সহ -
+দোকানদারের নাম: $ownerName
+মোবাইল: $shopPhone
+            """.trimIndent()
+            
+            1 -> """
+আসসালামু আলাইকুম, প্রিয় $customerName।
+
+আপনার সার্বিক সুস্বাস্থ্য কামনা করছি। $shopName এ আপনার পূর্বের বকেয়া হিসাব ৳$displayAmount রয়েছে (এলাকা: $location)।
+
+অনুরোধ সাপেক্ষে বকেয়াটি আগামী $nextStr তারিখের মধ্যে পরিশোধ করার জন্য বিনীতভাবে অনুরোধ করা হলো। আজ $todayStr থেকে আপনি পরিশোধের জন্য ৭ দিন সময় পাচ্ছেন।
+
+শুভকামনায় -
+দোকানদারের নাম: $ownerName
+ফোন: $shopPhone
+            """.trimIndent()
+            
+            else -> """
+আসসালামু আলাইকুম, শ্রদ্ধেয় $customerName সাহেব।
+
+ব্যবসায়িক সুসম্পর্ক বজায় রাখতে আমরা সদা সচেষ্ট। $shopName এ আপনার বর্তমান বকেয়া অ্যাকাউন্ট ব্যালেন্সটি হলো ৳$displayAmount (আপনার লোকেশন: $location)।
+
+আগামী $nextStr তারিখের মধ্যে বকেয়া পরিশোধ করার জন্য আপনাকে বিশেষ অনুরোধ জানানো হচ্ছে। উল্লেখ্য যে, আজকের তারিখ $todayStr।
+
+ধন্যবাদান্তে -
+দোকানদারের নাম: $ownerName, $shopName
+কন্টাক্ট: $shopPhone
+            """.trimIndent()
+        }
+    } else {
+        return when (index % 3) {
+            0 -> """
+Assalamu Alaikum, Dear $customerName.
+                
+Hope you are doing well from $shopName. Your current outstanding balance is ৳$displayAmount (Location: $location).
+                
+Today: $todayStr. We kindly request you to settle this balance by $nextStr for your convenience. We appreciate your continuation.
+                
+Best regards -
+Shopkeeper: $ownerName
+Phone: $shopPhone
+            """.trimIndent()
+            
+            1 -> """
+Assalamu Alaikum, Dear $customerName.
+                
+Wishing you good health. You have a pending credit ledger balance of ৳$displayAmount at $shopName (Area: $location).
+                
+You are kindly requested to clear the balance by $nextStr. You have 7 days starting from today, $todayStr.
+                
+Respectfully -
+Shopkeeper: $ownerName
+Contact: $shopPhone
+            """.trimIndent()
+            
+            else -> """
+Assalamu Alaikum, Dear $customerName.
+                
+We value our business relation. Your outstanding balance at $shopName is ৳$displayAmount (Location: $location).
+                
+Please clear this due by $nextStr. Note that today's date is $todayStr.
+                
+Thank you -
+Shopkeeper: $ownerName, $shopName
+Phone: $shopPhone
+            """.trimIndent()
         }
     }
 }
@@ -1104,106 +1854,138 @@ fun CustomerRecordCard(
 
             Divider(modifier = Modifier.padding(vertical = 12.dp), color = colors.onBackground.copy(alpha = 0.05f))
 
-            // Due actions bar holding transactions on left and edit/delete on right
+            // Due actions row 1: Core transactions (Deposit and Due)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Deposit button
+                Button(
+                    onClick = onDepositClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.09f), contentColor = colors.primary),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
                 ) {
-                    // Deposit button
+                    Text(
+                        text = if (isBn) "+ জমা আদায়" else "+ Deposit",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Add baki button
+                Button(
+                    onClick = onNewDueClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF9C4), contentColor = Color(0xFFAC8100)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                ) {
+                    Text(
+                        text = if (isBn) "+ বাকি লিখুন" else "+ Add Due",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Due actions row 2: AI utilities & profile management (AI SMS, Edit, Delete)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val hasSms = customer.totalDue != 0.0 && customer.phone.isNotBlank()
+                
+                // 1. AI SMS Option (Takes proportional weight if available)
+                if (hasSms) {
                     Button(
-                        onClick = onDepositClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.09f), contentColor = colors.primary),
+                        onClick = onRemindClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary.copy(alpha = 0.08f),
+                            contentColor = colors.primary
+                        ),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .height(36.dp)
+                            .weight(1.2f)
+                            .testTag("btn_trigger_ai_sms_${customer.name.replace(" ", "_")}")
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isBn) "+ জমা আদায়" else "+ Deposit",
+                            text = if (isBn) "এআই এসএমএস" else "AI SMS",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    // Add baki button
-                    Button(
-                        onClick = onNewDueClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF9C4), contentColor = Color(0xFFAC8100)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Text(
-                            text = if (isBn) "+ বাকি লিখুন" else "+ Add Due",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Gemini AI SMS Draft
-                    if (customer.totalDue != 0.0) {
-                        Button(
-                            onClick = onRemindClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant, contentColor = colors.primary),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier
-                                .height(34.dp)
-                                .testTag("btn_trigger_ai_sms_${customer.name.replace(" ", "_")}")
-                        ) {
-                            Icon(Icons.Default.Info, null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "এআই এসএমএস",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
                 }
 
-                // Edit Profile & Delete customer options on right side
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                // 2. Edit Profile Option (Always in the middle point)
+                Button(
+                    onClick = onEditClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary.copy(alpha = 0.08f),
+                        contentColor = colors.primary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .weight(1f)
+                        .testTag("btn_edit_customer_${customer.id}")
                 ) {
-                    // Edit Profile option
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.primary.copy(alpha = 0.08f))
-                            .testTag("btn_edit_customer_${customer.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit profile",
-                            tint = colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Profile",
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isBn) "এডিট" else "Edit",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-                    // Delete customer option
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(colors.error.copy(alpha = 0.08f))
-                            .testTag("btn_delete_customer_${customer.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete customer",
-                            tint = colors.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                // 3. Delete Option (Placed on the right end)
+                Button(
+                    onClick = onDeleteClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.error.copy(alpha = 0.08f),
+                        contentColor = colors.error
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .weight(1f)
+                        .testTag("btn_delete_customer_${customer.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete customer",
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isBn) "ডিলিট" else "Delete",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
