@@ -18,7 +18,8 @@ data class SyncPayload(
     val customers: List<Customer> = emptyList(),
     val dealers: List<Dealer> = emptyList(),
     val transactions: List<TransactionRecord> = emptyList(),
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val registrationTimestamp: Long? = null
 )
 
 object CloudSyncEngine {
@@ -206,41 +207,56 @@ object CloudSyncEngine {
     /**
      * Download payload from custom key-value cloud store with redirection support
      */
-    suspend fun downloadPayload(email: String): SyncPayload? {
-        if (email.isBlank()) return null
+    suspend fun downloadPayload(email: String): SyncPayload? = coroutineScope {
+        if (email.isBlank()) return@coroutineScope null
         val trimmedRaw = email.trim().lowercase()
 
-        // 1. Try reading directly first (it might be the primary email)
-        val directKey = getSanitizedKey(trimmedRaw)
-        val directUrl = "$BASE_URL$directKey"
-        val directPayload = fetchPayloadByUrl(directUrl)
-        if (directPayload != null) {
-            return directPayload
+        // 1. Try reading directly first
+        val directDeferred = async(Dispatchers.IO) {
+            val directKey = getSanitizedKey(trimmedRaw)
+            val directUrl = "$BASE_URL$directKey"
+            fetchPayloadByUrl(directUrl)
         }
 
-        // 2. If direct check fails (e.g. they logged in using Phone or Joint info), check for a redirect key mapping
-        val redirectKey = getSanitizedRedirectKey(trimmedRaw)
-        val redirectUrl = "$BASE_URL$redirectKey"
-        val redirectedEmail = fetchStringByUrl(redirectUrl)
-        if (!redirectedEmail.isNullOrBlank()) {
-            val resolvedUrl = "$BASE_URL${getSanitizedKey(redirectedEmail)}"
-            return fetchPayloadByUrl(resolvedUrl)
-        }
-
-        // 3. Try normalizing raw identifier to 11-digit mobile number if applicable
-        val ultraCleanRaw = trimmedRaw.replace("-", "").replace(" ", "").replace("+", "")
-        if (ultraCleanRaw.length >= 11) {
-            val shortPhone = ultraCleanRaw.takeLast(11)
-            val shortRedirectKey = getSanitizedRedirectKey(shortPhone)
-            val shortRedirectUrl = "$BASE_URL$shortRedirectKey"
-            val shortRedirectedEmail = fetchStringByUrl(shortRedirectUrl)
-            if (!shortRedirectedEmail.isNullOrBlank()) {
-                val resolvedUrl = "$BASE_URL${getSanitizedKey(shortRedirectedEmail)}"
-                return fetchPayloadByUrl(resolvedUrl)
+        // 2. Try redirect key mapping
+        val redirectDeferred = async(Dispatchers.IO) {
+            val redirectKey = getSanitizedRedirectKey(trimmedRaw)
+            val redirectUrl = "$BASE_URL$redirectKey"
+            val redirectedEmail = fetchStringByUrl(redirectUrl)
+            if (!redirectedEmail.isNullOrBlank()) {
+                val resolvedUrl = "$BASE_URL${getSanitizedKey(redirectedEmail)}"
+                fetchPayloadByUrl(resolvedUrl)
+            } else {
+                null
             }
         }
 
-        return null
+        // 3. Try normalizing raw identifier to 11-digit mobile number if applicable
+        val phoneDeferred = async(Dispatchers.IO) {
+            val ultraCleanRaw = trimmedRaw.replace("-", "").replace(" ", "").replace("+", "")
+            if (ultraCleanRaw.length >= 11) {
+                val shortPhone = ultraCleanRaw.takeLast(11)
+                val shortRedirectKey = getSanitizedRedirectKey(shortPhone)
+                val shortRedirectUrl = "$BASE_URL$shortRedirectKey"
+                val shortRedirectedEmail = fetchStringByUrl(shortRedirectUrl)
+                if (!shortRedirectedEmail.isNullOrBlank()) {
+                    val resolvedUrl = "$BASE_URL${getSanitizedKey(shortRedirectedEmail)}"
+                    fetchPayloadByUrl(resolvedUrl)
+                } else null
+            } else null
+        }
+
+        // Wait concurrently but prioritize the directResult if found because it's fastest
+        val directResult = directDeferred.await()
+        if (directResult != null) return@coroutineScope directResult
+
+        val redirectResult = redirectDeferred.await()
+        if (redirectResult != null) return@coroutineScope redirectResult
+
+        val phoneResult = phoneDeferred.await()
+        if (phoneResult != null) return@coroutineScope phoneResult
+
+        null
     }
 
     /**

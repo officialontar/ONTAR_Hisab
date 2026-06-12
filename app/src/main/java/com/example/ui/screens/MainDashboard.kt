@@ -865,7 +865,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                             profilePic = editOwnerPicture.ifBlank { null },
                             shopPic = editShopPicture.ifBlank { null }
                         )
-                        showProfileSettingsDialog = false
+                        // showProfileSettingsDialog = false // stay on the dialog as requested to review updated info
                     },
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -881,7 +881,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                         showProfileSettingsDialog = false
                     }
                 ) {
-                    Text(text = if (isBn) "বাতিল" else "Cancel")
+                    Text(text = if (isBn) "বন্ধ করুন" else "Close")
                 }
             },
             shape = RoundedCornerShape(20.dp),

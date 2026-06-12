@@ -58,6 +58,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
+    private var lastProfileUpdateTime = 0L
+
     // Authentication messages
     private val _authStateMessage = MutableStateFlow<String?>(null)
     val authStateMessage: StateFlow<String?> = _authStateMessage.asStateFlow()
@@ -275,51 +277,57 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 var activeUser = user
                 if (remotePayload != null) {
                     val remoteUser = remotePayload.user
-                    
-                    // Check blocks
-                    val currentDevice = getDeviceName()
-                    val blockedList = try {
-                        val arr = org.json.JSONArray(remoteUser.blockedDevicesJson ?: "[]")
-                        List(arr.length()) { i -> arr.getString(i) }
-                    } catch(e: Exception) { emptyList<String>() }
-                    
-                    val isAlwaysAdmin = remoteUser.email.trim().lowercase() == "mdanisujjamanontar@gmail.com"
-                    if ((remoteUser.isBlocked || blockedList.contains(currentDevice)) && !isAlwaysAdmin) {
-                        repository.updateUser(remoteUser)
+                    val remoteTimestamp = remotePayload.timestamp
+
+                    // Only overwrite local user with remote user if remote payload is newer than our last edit
+                    val isRemoteNewer = remoteTimestamp > lastProfileUpdateTime
+
+                    if (isRemoteNewer) {
+                        // Check blocks
+                        val currentDevice = getDeviceName()
+                        val blockedList = try {
+                            val arr = org.json.JSONArray(remoteUser.blockedDevicesJson ?: "[]")
+                            List(arr.length()) { i -> arr.getString(i) }
+                        } catch(e: Exception) { emptyList<String>() }
+                        
+                        val isAlwaysAdmin = remoteUser.email.trim().lowercase() == "mdanisujjamanontar@gmail.com"
+                        if ((remoteUser.isBlocked || blockedList.contains(currentDevice)) && !isAlwaysAdmin) {
+                            repository.updateUser(remoteUser)
+                            withContext(Dispatchers.Main) {
+                                _currentUser.value = remoteUser
+                                _isCloudSyncing.value = false
+                            }
+                            return@launch
+                        }
+                        
+                        // Update active devices lists
+                        val activeArr = try {
+                            org.json.JSONArray(remoteUser.activeDevicesJson ?: "[]")
+                        } catch(e: Exception) { org.json.JSONArray() }
+                        
+                        var hasOurDevice = false
+                        for (i in 0 until activeArr.length()) {
+                            if (activeArr.getString(i) == currentDevice) {
+                                hasOurDevice = true
+                                break
+                            }
+                        }
+                        if (!hasOurDevice) {
+                            activeArr.put(currentDevice)
+                        }
+                        
+                        val updatedUser = remoteUser.copy(
+                            activeDevicesJson = activeArr.toString(),
+                            registerDevice = remoteUser.registerDevice ?: currentDevice,
+                            isBlocked = false // safety
+                        )
+                        
+                        repository.updateUser(updatedUser)
+                        activeUser = updatedUser
+                        
                         withContext(Dispatchers.Main) {
-                            _currentUser.value = remoteUser
-                            _isCloudSyncing.value = false
+                            _currentUser.value = updatedUser
                         }
-                        return@launch
-                    }
-                    
-                    // Update active devices lists
-                    val activeArr = try {
-                        org.json.JSONArray(remoteUser.activeDevicesJson ?: "[]")
-                    } catch(e: Exception) { org.json.JSONArray() }
-                    
-                    var hasOurDevice = false
-                    for (i in 0 until activeArr.length()) {
-                        if (activeArr.getString(i) == currentDevice) {
-                            hasOurDevice = true
-                            break
-                        }
-                    }
-                    if (!hasOurDevice) {
-                        activeArr.put(currentDevice)
-                    }
-                    
-                    val updatedUser = remoteUser.copy(
-                        activeDevicesJson = activeArr.toString(),
-                        registerDevice = remoteUser.registerDevice ?: currentDevice,
-                        isBlocked = false // safety
-                    )
-                    
-                    repository.updateUser(updatedUser)
-                    activeUser = updatedUser
-                    
-                    withContext(Dispatchers.Main) {
-                        _currentUser.value = updatedUser
                     }
                 }
                 
@@ -450,7 +458,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     customers = finalCustomers,
                     dealers = finalDealers,
                     transactions = finalTx,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
+                    registrationTimestamp = remotePayload?.registrationTimestamp ?: remotePayload?.timestamp ?: System.currentTimeMillis()
                 )
 
                 val uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(user.email, uploadPayload)
@@ -526,7 +535,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                             customers = emptyList(),
                             dealers = emptyList(),
                             transactions = emptyList(),
-                            timestamp = System.currentTimeMillis()
+                            timestamp = System.currentTimeMillis(),
+                            registrationTimestamp = System.currentTimeMillis()
                         )
                         com.example.api.CloudSyncEngine.uploadPayload(newUser.email, initialPayload)
                     } catch(e: Exception) {
@@ -591,7 +601,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                                     customers = repository.getCustomers(updatedUser.email).firstOrNull() ?: emptyList(),
                                     dealers = repository.getDealers(updatedUser.email).firstOrNull() ?: emptyList(),
                                     transactions = repository.getTransactions(updatedUser.email).firstOrNull() ?: emptyList(),
-                                    timestamp = System.currentTimeMillis()
+                                    timestamp = System.currentTimeMillis(),
+                                    registrationTimestamp = com.example.api.CloudSyncEngine.downloadPayload(updatedUser.email)?.registrationTimestamp ?: System.currentTimeMillis()
                                 )
                                 com.example.api.CloudSyncEngine.uploadPayload(updatedUser.email, payload)
                             }
@@ -662,21 +673,24 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 }
 
                 _currentUser.value = updatedUser
+                lastProfileUpdateTime = System.currentTimeMillis()
 
-                // Sync updated user to Cloud Sync bucket
-                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetEmail)
-                val newPayload = if (cloudPayload != null) {
-                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
-                } else {
-                    com.example.api.SyncPayload(
-                        user = updatedUser,
-                        stockItems = emptyList(),
-                        customers = emptyList(),
-                        dealers = emptyList(),
-                        transactions = emptyList(),
-                        timestamp = System.currentTimeMillis()
-                    )
-                }
+                // Sync updated user to Cloud Sync bucket by using local datasets directly (instantaneous)
+                val finalStock = repository.getStockItems(targetEmail).firstOrNull() ?: emptyList()
+                val finalCustomers = repository.getCustomers(targetEmail).firstOrNull() ?: emptyList()
+                val finalDealers = repository.getDealers(targetEmail).firstOrNull() ?: emptyList()
+                val finalTx = repository.getTransactions(targetEmail).firstOrNull() ?: emptyList()
+
+                val existingPayload = com.example.api.CloudSyncEngine.downloadPayload(targetEmail)
+                val newPayload = com.example.api.SyncPayload(
+                    user = updatedUser,
+                    stockItems = finalStock,
+                    customers = finalCustomers,
+                    dealers = finalDealers,
+                    transactions = finalTx,
+                    timestamp = System.currentTimeMillis(),
+                    registrationTimestamp = existingPayload?.registrationTimestamp ?: existingPayload?.timestamp ?: System.currentTimeMillis()
+                )
                 com.example.api.CloudSyncEngine.uploadPayload(targetEmail, newPayload)
 
                 withContext(Dispatchers.Main) {
@@ -703,7 +717,11 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 // Update on Cloud KVDB.io
                 val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetUser.email)
                 val newPayload = if (cloudPayload != null) {
-                    cloudPayload.copy(user = targetUser, timestamp = System.currentTimeMillis())
+                    cloudPayload.copy(
+                        user = targetUser,
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = cloudPayload.registrationTimestamp ?: cloudPayload.timestamp
+                    )
                 } else {
                     com.example.api.SyncPayload(
                         user = targetUser,
@@ -711,13 +729,15 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                         customers = emptyList(),
                         dealers = emptyList(),
                         transactions = emptyList(),
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = System.currentTimeMillis()
                     )
                 }
                 val success = com.example.api.CloudSyncEngine.uploadPayload(targetUser.email, newPayload)
                 
                 // If it is our current user, update their state
                 if (_currentUser.value?.email?.lowercase() == targetUser.email.lowercase()) {
+                    lastProfileUpdateTime = System.currentTimeMillis()
                     withContext(Dispatchers.Main) {
                         _currentUser.value = targetUser
                     }
@@ -734,6 +754,34 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 Log.e("AppViewModel", "Admin profile update error", e)
                 withContext(Dispatchers.Main) {
                     onComplete(false, e.message ?: "Error updating user")
+                }
+            }
+        }
+    }
+
+    fun wipeAllUsersExceptAdmin(onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val remoteUsers = com.example.api.CloudSyncEngine.fetchAllRegisteredUsers()
+                val targetEmails = remoteUsers
+                    .map { it.email.trim().lowercase() }
+                    .distinct()
+                    .filter { it != "mdanisujjamanontar@gmail.com" }
+
+                var deletedCount = 0
+                targetEmails.forEach { email ->
+                    repository.deleteUserByEmail(email)
+                    com.example.api.CloudSyncEngine.deletePayload(email)
+                    deletedCount++
+                }
+
+                withContext(Dispatchers.Main) {
+                    onComplete(true, if (_isBengali.value) "সাফল্যের সাথে $deletedCount টি অ্যাকাউন্ট মুছে ফেলা হয়েছে!" else "Successfully wiped $deletedCount accounts from server!")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Wipe all users error", e)
+                withContext(Dispatchers.Main) {
+                    onComplete(false, e.message ?: "Wipe failed")
                 }
             }
         }
@@ -889,7 +937,11 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 // Push updated password and existing datasets securely to CloudSync
                 val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(userItem.email)
                 val newPayload = if (cloudPayload != null) {
-                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
+                    cloudPayload.copy(
+                        user = updatedUser,
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = cloudPayload.registrationTimestamp ?: cloudPayload.timestamp
+                    )
                 } else {
                     com.example.api.SyncPayload(
                         user = updatedUser,
@@ -897,7 +949,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                         customers = emptyList(),
                         dealers = emptyList(),
                         transactions = emptyList(),
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = System.currentTimeMillis()
                     )
                 }
                 com.example.api.CloudSyncEngine.uploadPayload(userItem.email, newPayload)
@@ -945,7 +998,11 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 // Sync updated password to Cloud
                 val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(userItem.email)
                 val newPayload = if (cloudPayload != null) {
-                    cloudPayload.copy(user = updatedUser, timestamp = System.currentTimeMillis())
+                    cloudPayload.copy(
+                        user = updatedUser,
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = cloudPayload.registrationTimestamp ?: cloudPayload.timestamp
+                    )
                 } else {
                     com.example.api.SyncPayload(
                         user = updatedUser,
@@ -953,7 +1010,8 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                         customers = emptyList(),
                         dealers = emptyList(),
                         transactions = emptyList(),
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = System.currentTimeMillis()
                     )
                 }
                 com.example.api.CloudSyncEngine.uploadPayload(userItem.email, newPayload)
@@ -1423,6 +1481,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 photoUri = photoUri
             )
             repository.insertDealer(dealer)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "নতুন ডিলার যোগ হয়েছে!" else "New dealer added successfully!")
             }
@@ -1449,6 +1508,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 dealerId = dealer.id
             )
             repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "ডিলারের টাকা পরিশোধ সফল!" else "Dealer payout registered!")
             }
@@ -1475,6 +1535,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 dealerId = dealer.id
             )
             repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "ডিলার ক্রয় রেকর্ড করা হয়েছে" else "Dealer purchase recorded")
             }
@@ -1484,6 +1545,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     fun deleteDealer(dealer: Dealer) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteDealer(dealer)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "ডিলার রিমুভ করা হয়েছে" else "Dealer removed")
             }
@@ -1500,6 +1562,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 photoUri = photoUri
             )
             repository.updateDealer(updated)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "ডিলার প্রোফাইল আপডেট করা হয়েছে!" else "Dealer profile updated successfully!")
             }

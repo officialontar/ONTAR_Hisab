@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -7,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +35,8 @@ import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +54,14 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var activeStatuses by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var lastSyncTimes by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
 
+    // Dynamic metrics requested by the user
+    var activeUsersCount by remember { mutableStateOf(0) }
+    var inactiveUsersCount by remember { mutableStateOf(0) }
+    var activeDevicesCount by remember { mutableStateOf(0) }
+    var blockedDevicesCount by remember { mutableStateOf(0) }
+    var customerDuesMap by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var dealerDuesMap by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+
     // Dialog state variables for Admin functions
     var showEditDialog by remember { mutableStateOf(false) }
     var userToEdit by remember { mutableStateOf<User?>(null) }
@@ -62,6 +74,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var editShopPic by remember { mutableStateOf("") }
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showFactoryResetConfirmDialog by remember { mutableStateOf(false) }
     var userToDelete by remember { mutableStateOf<User?>(null) }
 
     var showManageDevicesDialog by remember { mutableStateOf(false) }
@@ -88,39 +101,100 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                 val remoteUsers = withContext(Dispatchers.IO) {
                     CloudSyncEngine.fetchAllRegisteredUsers()
                 }
-                userList = remoteUsers
+                val rawFilteredList = remoteUsers
                     .distinctBy { it.email.trim().lowercase() }
                     .filter { it.email.trim().lowercase() != "demo@example.com" }
-                totalShopsCount = userList.size
+
+                totalShopsCount = rawFilteredList.size
 
                 val statusMap = mutableMapOf<String, Boolean>()
                 val syncTimeMap = mutableMapOf<String, Long>()
+                val custDuesMap = mutableMapOf<String, Double>()
+                val dealDuesMap = mutableMapOf<String, Double>()
 
                 // Calculate cumulative stats
                 var tempCust = 0
                 var tempTx = 0
                 
-                // Let's count totals
+                // Fetch all payloads concurrently in parallel using async (takes less than 1-2 seconds!)
+                val payloadsMap = withContext(Dispatchers.IO) {
+                    rawFilteredList.map { u ->
+                        async {
+                            u.email.trim().lowercase() to CloudSyncEngine.downloadPayload(u.email)
+                        }
+                    }.awaitAll().toMap()
+                }
+
+                // 1. Stable Registration chronological sorting
+                // 2. The admin user "mdanisujjamanontar@gmail.com" ALWAYS ranks first (Index 0 = Serial #1)
+                // 3. Other users sort chronologically based on registrationTimestamp ascending
+                val sortedOthers = rawFilteredList
+                    .filter { it.email.trim().lowercase() != "mdanisujjamanontar@gmail.com" }
+                    .sortedWith(compareBy { u ->
+                        val emailKey = u.email.trim().lowercase()
+                        payloadsMap[emailKey]?.registrationTimestamp ?: payloadsMap[emailKey]?.timestamp ?: Long.MAX_VALUE
+                    })
+                val mainAdminUser = rawFilteredList.find { it.email.trim().lowercase() == "mdanisujjamanontar@gmail.com" }
+                userList = if (mainAdminUser != null) {
+                    listOf(mainAdminUser) + sortedOthers
+                } else {
+                    sortedOthers
+                }
+
+                var actUsers = 0
+                var inactUsers = 0
+                var actDevices = 0
+                var blkDevices = 0
+
                 userList.forEach { u ->
-                    // download stats in the background
-                    val payload = withContext(Dispatchers.IO) {
-                        CloudSyncEngine.downloadPayload(u.email)
-                    }
+                    val emailKey = u.email.trim().lowercase()
+                    val payload = payloadsMap[emailKey]
                     if (payload != null) {
                         tempCust += payload.customers.size
                         tempTx += payload.transactions.size
                         syncTimeMap[u.email] = payload.timestamp
-                        // Consider user active if they have synced in internal timestamp within last 12 hrs
-                        statusMap[u.email] = (System.currentTimeMillis() - payload.timestamp) <= (12 * 60 * 60 * 1000)
+                        
+                        // Consider user active if synced within last 12 hours
+                        val isActive = (System.currentTimeMillis() - payload.timestamp) <= (12 * 60 * 60 * 1000)
+                        statusMap[u.email] = isActive
+                        if (isActive) actUsers++ else inactUsers++
+
+                        // Calculate sum of customer dues and dealer dues
+                        custDuesMap[u.email] = payload.customers.sumOf { it.totalDue }
+                        dealDuesMap[u.email] = payload.dealers.sumOf { it.totalOwed }
                     } else {
                         statusMap[u.email] = false
                         syncTimeMap[u.email] = 0L
+                        inactUsers++
+                        custDuesMap[u.email] = 0.0
+                        dealDuesMap[u.email] = 0.0
                     }
+
+                    // Count active and blocked devices
+                    val activeArrLen = try {
+                        val arr = org.json.JSONArray(u.activeDevicesJson ?: "[]")
+                        arr.length()
+                    } catch(e: Exception) { 0 }
+                    actDevices += activeArrLen
+
+                    val blockedArrLen = try {
+                        val arr = org.json.JSONArray(u.blockedDevicesJson ?: "[]")
+                        arr.length()
+                    } catch(e: Exception) { 0 }
+                    blkDevices += blockedArrLen
                 }
+
                 activeStatuses = statusMap
                 lastSyncTimes = syncTimeMap
+                customerDuesMap = custDuesMap
+                dealerDuesMap = dealDuesMap
                 totalCustomersCount = tempCust
                 totalTransactionsCount = tempTx
+                
+                activeUsersCount = actUsers
+                inactiveUsersCount = inactUsers
+                activeDevicesCount = actDevices
+                blockedDevicesCount = blkDevices
 
                 feedbackMessage = if (isBn) "সরাসরি ডিরেক্টরি থেকে সর্বশেষ ডেটা লোড হয়েছে!" else "Latest registry data loaded successfully!"
             } catch (e: Exception) {
@@ -165,72 +239,287 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(colors.background)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Stats Banner
-            Card(
+            // Stats Banner as scrollable item
+            item {
+                Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.secondaryContainer),
-                shape = RoundedCornerShape(12.dp)
+                colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(2.dp)),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = if (isBn) "📊 লাইভ ডেটাবেজ ও ইউজার পরিসংখ্যান" else "📊 Live Database & Installer Statistics",
+                        text = if (isBn) "📊 লাইভ ডেটাবেজ ও ইউজার পরিসংখ্যান" else "📊 Live Database & Statistics",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
-                        color = colors.onSecondaryContainer
+                        color = colors.primary
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = if (isBn) "মোট রেজিস্টার্ড শপ/ইউজার" else "Total Active Shops",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSecondaryContainer.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = if (isLoading && totalShopsCount == 0) "লোডিং..." else "$totalShopsCount টি",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = colors.primary
-                            )
+                        // Total Shops
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.primaryContainer.copy(alpha = 0.4f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.Home, null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isBn) "মোট শপ" else "Total Shops",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "$totalShopsCount টি",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = colors.primary
+                                )
+                            }
                         }
-                        Column {
-                            Text(
-                                text = if (isBn) "সমগ্র গ্রাহক সংখ্যা" else "Total App Customers",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSecondaryContainer.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = if (isLoading && totalCustomersCount == 0) "লোডিং..." else "$totalCustomersCount জন",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = colors.secondary
-                            )
+
+                        // Total Customers
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.secondaryContainer.copy(alpha = 0.4f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.Person, null, tint = colors.secondary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isBn) "মোট গ্রাহক" else "Total Customers",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "$totalCustomersCount জন",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = colors.secondary
+                                )
+                            }
                         }
-                        Column {
+
+                        // Total Transactions
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.tertiaryContainer.copy(alpha = 0.4f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.ShoppingCart, null, tint = colors.tertiary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isBn) "মোট লেনদেন" else "Total Tx",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onTertiaryContainer
+                                )
+                                Text(
+                                    text = "$totalTransactionsCount টি",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = colors.tertiary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Users Status Card
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Star,
+                                        null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isBn) "ইউজার অবস্থা" else "User Status",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "একটিভ" else "Active",
+                                            fontSize = 9.sp,
+                                            color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "$activeUsersCount জন",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "ইনএকটিভ" else "Inactive",
+                                            fontSize = 9.sp,
+                                            color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "$inactiveUsersCount জন",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Devices Status Card
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        null,
+                                        tint = Color(0xFF2196F3),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isBn) "ডিভাইস অবস্থা" else "Device Status",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "সক্রিয়" else "Active",
+                                            fontSize = 9.sp,
+                                            color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "$activeDevicesCount টি",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1565C0)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "ব্লকড" else "Blocked",
+                                            fontSize = 9.sp,
+                                            color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "$blockedDevicesCount টি",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            } // end of stats banner item
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .border(1.dp, colors.error.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                    colors = CardDefaults.cardColors(containerColor = colors.errorContainer.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (isBn) "⚠️ সম্পূর্ণ ক্লাউড ইউজার ও ডাটা রিসেট" else "⚠️ Factory Server & Registry Reset",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = colors.error,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isBn) 
+                                "এটি ব্যবহার করে পূর্বে তৈরি করা সকল ডেমো ও পরীক্ষামূলক গ্রাহকদের তথ্য এবং ক্লাউড ডাটাবেজ সম্পূর্ণ ডিলিট করা সম্ভব। শুধু আপনার মূল অ্যাডমিন অ্যাকাউন্ট অপরিবর্তিত থাকবে।" 
+                            else 
+                                "This will permanently wipe all previously registered test shops/users and their records from the servers.",
+                            fontSize = 11.sp,
+                            color = colors.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showFactoryResetConfirmDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isBn) "মোট ট্রানজেকশন" else "Total Transactions",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSecondaryContainer.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = if (isLoading && totalTransactionsCount == 0) "লোডিং..." else "$totalTransactionsCount টি",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = colors.tertiary
+                                text = if (isBn) "সকল ইউজার মুছুন (ফ্রেশ ক্লিন ডাটা)" else "Wipe All Registered Users",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
                             )
                         }
                     }
@@ -238,62 +527,66 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             }
 
             if (feedbackMessage != null) {
-                Text(
-                    text = feedbackMessage ?: "",
-                    color = colors.primary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    textAlign = TextAlign.Center
-                )
+                item {
+                    Text(
+                        text = feedbackMessage ?: "",
+                        color = colors.primary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = colors.primary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (isBn) "ক্লাউড থেকে ইউজারদের তথ্য আনা হচ্ছে..." else "Querying real-time users from cloud...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onBackground.copy(alpha = 0.6f)
-                        )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = colors.primary)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (isBn) "ক্লাউড থেকে ইউজারদের তথ্য আনা হচ্ছে..." else "Querying real-time users from cloud...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onBackground.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             } else if (userList.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isBn) "কোন রেজিস্টার্ড ইউজার পাওয়া যায়নি" else "No registered users found in directory",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.onBackground.copy(alpha = 0.5f)
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isBn) "কোন রেজিস্টার্ড ইউজার পাওয়া যায়নি" else "No registered users found in directory",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = colors.onBackground.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             } else {
-                Text(
-                    text = if (isBn) "নিবন্ধিত দোকান ও মালিকদের তালিকা:" else "Registered Shops and Owners Link List:",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = colors.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                item {
+                    Text(
+                        text = if (isBn) "নিবন্ধিত দোকান ও মালিকদের তালিকা:" else "Registered Shops and Owners Link List:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = colors.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(userList) { user ->
+                itemsIndexed(userList) { index, user ->
                         // Render detailed Admin Shop card
                         Card(
                             modifier = Modifier
@@ -302,173 +595,260 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                             colors = CardDefaults.cardColors(containerColor = colors.surface),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    // Shop Picture
-                                    val shopPic = user.shopPicture
-                                    if (!shopPic.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = shopPic,
-                                            contentDescription = "Shop Image",
-                                            modifier = Modifier
-                                                .size(54.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(8.dp)),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
-                                    } else {
+                                    // 1. Header Row (Flush top-left, no top margins/spacing gaps)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(54.dp)
-                                                .background(colors.primaryContainer, RoundedCornerShape(8.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Star,
-                                                contentDescription = "Shop Placeholder",
-                                                tint = colors.onPrimaryContainer,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    // Owner Profile Picture
-                                    val profilePic = user.profilePicture
-                                    if (!profilePic.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = profilePic,
-                                            contentDescription = "Owner Profile Image",
-                                            modifier = Modifier
-                                                .size(54.dp)
-                                                .clip(CircleShape)
-                                                .border(1.5.dp, colors.secondary, CircleShape),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(54.dp)
-                                                .background(colors.secondaryContainer, CircleShape),
-                                            contentAlignment = Alignment.Center
+                                                .clip(RoundedCornerShape(topStart = 11.dp, bottomEnd = 11.dp))
+                                                .background(colors.primary.copy(alpha = 0.15f))
+                                                .padding(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
                                             Text(
-                                                text = if (user.shopName.isNotBlank()) user.shopName.take(1).uppercase() else "S",
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.onSecondaryContainer,
-                                                style = MaterialTheme.typography.titleMedium
+                                                text = if (isBn) "সিরিয়াল: ${index + 1}" else "Serial #${index + 1}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = colors.primary
                                             )
                                         }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
 
-                                    Column(modifier = Modifier.weight(1f)) {
+                                        Spacer(modifier = Modifier.width(10.dp))
+
                                         Text(
                                             text = user.shopName.ifBlank { if (isBn) "নামবিহীন দোকান" else "Unnamed Shop" },
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 15.sp,
-                                            color = colors.onSurface
+                                            color = colors.onSurface,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 12.dp)
                                         )
-                                        
-                                        val jointOwners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
-                                        Text(
-                                            text = if (isBn) "মোট অংশীদার: ${jointOwners.size} জন" else "Total Partners: ${jointOwners.size}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = colors.secondary
-                                        )
+                                    }
 
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        val isActive = activeStatuses[user.email] ?: false
-                                        val syncTime = lastSyncTimes[user.email] ?: 0L
-                                        
+                                    // Content column right under header with minimal top margin
+                                    Column(
+                                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 6.dp)
+                                    ) {
                                         Row(
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                                         ) {
-                                            Box(
+                                            // Shop Picture Display with dynamic loading on admin devices
+                                            val shopPic = user.shopPicture
+                                            val isShopHttp = !shopPic.isNullOrBlank() && (shopPic.startsWith("http://") || shopPic.startsWith("https://"))
+                                            val finalShopModel = if (isShopHttp) shopPic else "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"
+                                            
+                                            AsyncImage(
+                                                model = finalShopModel,
+                                                contentDescription = "Shop Image",
                                                 modifier = Modifier
-                                                    .size(8.dp)
-                                                    .background(
-                                                        color = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
-                                                        shape = CircleShape
+                                                    .size(50.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(8.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            
+                                            Spacer(modifier = Modifier.width(8.dp))
+
+                                            // Owner Profile Picture Display with dynamic loading on admin devices
+                                            val profilePic = user.profilePicture
+                                            val isProfileHttp = !profilePic.isNullOrBlank() && (profilePic.startsWith("http://") || profilePic.startsWith("https://"))
+                                            val finalProfileModel = if (isProfileHttp) profilePic else "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
+                                            
+                                            AsyncImage(
+                                                model = finalProfileModel,
+                                                contentDescription = "Owner Profile Image",
+                                                modifier = Modifier
+                                                    .size(50.dp)
+                                                    .clip(CircleShape)
+                                                    .border(1.5.dp, colors.secondary, CircleShape),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            
+                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                val jointOwners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
+                                                Text(
+                                                    text = if (isBn) "মোট অংশীদার: ${jointOwners.size} জন" else "Total Partners: ${jointOwners.size}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = colors.secondary
+                                                )
+
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                val isActive = activeStatuses[user.email] ?: false
+                                                
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(8.dp)
+                                                            .background(
+                                                                color = if (isActive) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
+                                                                shape = CircleShape
+                                                            )
                                                     )
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (isActive) {
-                                                    if (isBn) "অ্যাক্টিভ (সক্রিয়)" else "Active"
-                                                } else {
-                                                    if (isBn) "ইনঅ্যাক্টিভ (নিষ্ক্রিয়)" else "Inactive"
-                                                },
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isActive) Color(0xFF4CAF50) else colors.onSurfaceVariant
-                                            )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = if (isActive) {
+                                                            if (isBn) "অ্যাক্টিভ (সক্রিয়)" else "Active"
+                                                        } else {
+                                                            if (isBn) "ইনঅ্যাক্টিভ (নিষ্ক্রিয়)" else "Inactive"
+                                                        },
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (isActive) Color(0xFF4CAF50) else colors.onSurfaceVariant
+                                                    )
+                                                }
+
+                                                val syncTime = lastSyncTimes[user.email] ?: 0L
+                                                if (syncTime > 0L) {
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    val sdf = java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a", java.util.Locale.getDefault())
+                                                    val formattedTime = sdf.format(java.util.Date(syncTime))
+                                                    Text(
+                                                        text = if (isBn) "সর্বশেষ সিঙ্ক: $formattedTime" else "Last Sync: $formattedTime",
+                                                        fontSize = 10.sp,
+                                                        color = colors.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                         }
 
-                                        if (syncTime > 0L) {
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            val sdf = java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a", java.util.Locale.getDefault())
-                                            val formattedTime = sdf.format(java.util.Date(syncTime))
+                                        // Dynamic Owner / Partners Card details rendering (Aesthetic, Professional!)
+                                        val parsedOwners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
+                                        parsedOwners.forEachIndexed { idx, owner ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.2f)),
+                                                border = BorderStroke(0.5.dp, colors.outlineVariant.copy(alpha = 0.5f))
+                                            ) {
+                                                Column(modifier = Modifier.padding(8.dp)) {
+                                                    Text(
+                                                        text = if (isBn) "অংশীদার #${idx + 1}" else "Partner #${idx + 1}",
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 11.sp,
+                                                        color = colors.primary,
+                                                        modifier = Modifier.padding(bottom = 4.dp)
+                                                    )
+
+                                                    // Name Row
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        modifier = Modifier.padding(vertical = 2.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = androidx.compose.material.icons.Icons.Default.Person,
+                                                            contentDescription = "Name",
+                                                            tint = colors.primary,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text(
+                                                            text = owner.name.ifBlank { if (isBn) "নামবিহীন অংশীদার" else "Unnamed Partner" },
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = colors.onSurface
+                                                        )
+                                                    }
+
+                                                    // Phone Row
+                                                    if (owner.phone.isNotBlank()) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = androidx.compose.material.icons.Icons.Default.Phone,
+                                                                contentDescription = "Phone",
+                                                                tint = Color(0xFF4CAF50),
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = owner.phone,
+                                                                fontSize = 12.sp,
+                                                                color = colors.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+
+                                                    // Email Row
+                                                    if (owner.email.isNotBlank()) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = androidx.compose.material.icons.Icons.Default.Email,
+                                                                contentDescription = "Email",
+                                                                tint = colors.secondary,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = owner.email,
+                                                                fontSize = 11.sp,
+                                                                color = colors.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                         if (!user.ipAddress.isNullOrBlank() || !user.registerLocation.isNullOrBlank()) {
+                                             Spacer(modifier = Modifier.height(4.dp))
+                                             Row(
+                                                 verticalAlignment = Alignment.CenterVertically,
+                                                 modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                                             ) {
+                                                 Icon(
+                                                     imageVector = androidx.compose.material.icons.Icons.Default.Info,
+                                                     contentDescription = "IP",
+                                                     tint = colors.primary,
+                                                     modifier = Modifier.size(14.dp)
+                                                 )
+                                                 Spacer(modifier = Modifier.width(6.dp))
+                                                 Text(
+                                                     text = if (isBn) 
+                                                         "আইপি: ${user.ipAddress ?: "অজানা"} (${user.registerLocation ?: "অজানা"})" 
+                                                     else 
+                                                         "IP: ${user.ipAddress ?: "Unknown"} (${user.registerLocation ?: "Unknown"})",
+                                                     fontSize = 11.sp,
+                                                     fontWeight = FontWeight.Bold,
+                                                     color = colors.primary
+                                                 )
+                                             }
+                                         }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Text(
-                                                text = if (isBn) "সর্বশেষ সিঙ্ক: $formattedTime" else "Last Sync: $formattedTime",
-                                                fontSize = 10.sp,
+                                                text = if (isBn) "প্রাইমারি ইমেইল: ${user.email}" else "Primary Email: ${user.email}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Light,
                                                 color = colors.onSurfaceVariant
                                             )
                                         }
-                                    }
-                                }
-                                
-                                val parsedOwners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
 
-                                parsedOwners.forEachIndexed { idx, owner ->
-                                    val name = owner.name.ifBlank { if (isBn) "মালিক সংখ্যা ${idx+1}" else "Owner #${idx+1}" }
-                                    Text(
-                                        text = if (isBn) 
-                                            "👤 $name (মোবাইল: ${owner.phone}, ইমেইল: ${owner.email})" 
-                                        else 
-                                            "👤 $name (Phone: ${owner.phone}, Email: ${owner.email})",
-                                        fontSize = 11.sp,
-                                        color = colors.onSurface.copy(alpha = 0.8f),
-                                        modifier = Modifier.padding(start = 8.dp, top = 2.dp)
-                                    )
-                                }
-
-                                 if (!user.ipAddress.isNullOrBlank() || !user.registerLocation.isNullOrBlank()) {
-                                     Spacer(modifier = Modifier.height(4.dp))
-                                     Text(
-                                         text = if (isBn) 
-                                             "🌐 নিবন্ধিত আইপি: ${user.ipAddress ?: "অজানা"} (${user.registerLocation ?: "অজানা"})" 
-                                         else 
-                                             "🌐 Registered IP: ${user.ipAddress ?: "Unknown"} (${user.registerLocation ?: "Unknown"})",
-                                         fontSize = 11.sp,
-                                         fontWeight = FontWeight.Bold,
-                                         color = colors.primary,
-                                         modifier = Modifier.padding(start = 8.dp, top = 2.dp)
-                                     )
-                                 }
-
-
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = if (isBn) "প্রাইমারি ইমেইল: ${user.email}" else "Primary Email: ${user.email}",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Light,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(4.dp))
                                 // Device Information section requested by user
                                 Text(
                                     text = if (isBn) 
@@ -533,6 +913,72 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                         )
                                     }
                                 }
+
+                                // Financial dues from the user's synced database
+                                val customerDues = customerDuesMap[user.email] ?: 0.0
+                                val dealerDues = dealerDuesMap[user.email] ?: 0.0
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.35f)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = if (isBn) "📉 গ্রাহকের মোট বাকি" else "📉 Total Cust Dues",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = colors.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = "৳ ${String.format("%.2f", customerDues)}",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFD32F2F)
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(1.dp)
+                                                .height(24.dp)
+                                                .background(colors.outlineVariant)
+                                        )
+
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(start = 12.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = if (isBn) "📈 ডিলারের মোট পাওনা" else "📈 Total Dealer Dues",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = colors.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = "৳ ${String.format("%.2f", dealerDues)}",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1976D2)
+                                             )
+                                         }
+                                     }
+                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Divider(color = colors.outlineVariant, thickness = 0.5.dp)
@@ -733,6 +1179,50 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(text = if (isBn) "বাতিল" else "Cancel")
+                }
+            }
+        )
+    }
+
+    // Factory Reset Confirmation Dialog
+    if (showFactoryResetConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showFactoryResetConfirmDialog = false },
+            title = {
+                Text(
+                    text = if (isBn) "ভয়াবহ ক্লাউড রিসেট নিশ্চিতকরণ!" else "Confirm Factory Cloud Reset!",
+                    fontWeight = FontWeight.Bold,
+                    color = colors.error
+                )
+            },
+            text = {
+                Text(
+                    text = if (isBn) {
+                        "আপনি কি নিশ্চিত যে আপনি আপনার (mdanisujjamanontar@gmail.com ছাড়া) তৈরি পূর্বের সকল রেজিস্টার্ড ইউজারদের অ্যাকাউন্ট এবং তাদের রিয়েল-টাইম ক্লাউড ডাটা সম্পূর্ণ ক্লিয়ার করতে চান? এটি অত্যন্ত সংবেদনশীল এবং কোনোভাবেই ফিরিয়ে আনা যাবে না!"
+                    } else {
+                        "Are you absolutely sure you want to completely sweep and wipe all previously registered users and their transaction database payloads? This action is highly sensitive and completely irreversible!"
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFactoryResetConfirmDialog = false
+                        isLoading = true
+                        viewModel.wipeAllUsersExceptAdmin { success, msg ->
+                            isLoading = false
+                            feedbackMessage = msg
+                            refreshData()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.error)
+                ) {
+                    Text(text = if (isBn) "হ্যাঁ, সম্পূর্ণ মুছুন" else "Yes, Wipe All Data")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFactoryResetConfirmDialog = false }) {
                     Text(text = if (isBn) "বাতিল" else "Cancel")
                 }
             }
@@ -1050,4 +1540,5 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             )
         }
     }
+}
 }
