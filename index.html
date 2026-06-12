@@ -1,199 +1,2287 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ONTAR_Hisab - Daily Expense Tracker</title>
+    <meta charset="UTF-8">
 
-<style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family: Arial, sans-serif;
-}
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
-body{
-    background:#f5f7fa;
-    color:#333;
-}
+    <meta name="description"
+          content="ONTAR Hisab — মুদি দোকানের দৈনিক বাকি, আয়, ব্যয় ও হিসাব ব্যবস্থাপনার সহজ Android অ্যাপ।">
 
-.container{
-    max-width:900px;
-    margin:auto;
-    padding:20px;
-}
+    <meta name="theme-color" content="#07111f">
 
-.hero{
-    text-align:center;
-    padding:40px 20px;
-}
+    <title>ONTAR Hisab | দোকানের ডিজিটাল হিসাব</title>
 
-.logo{
-    width:120px;
-    height:120px;
-    border-radius:24px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.15);
-}
+    <!-- Bootstrap CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
 
-h1{
-    margin-top:20px;
-    font-size:2rem;
-}
+    <style>
+        :root {
+            --dark: #07111f;
+            --dark-soft: #0c192b;
+            --surface: #102139;
+            --surface-light: #152a45;
+            --gold: #f2c66d;
+            --gold-dark: #c89335;
+            --green: #39c77a;
+            --white: #f8fafc;
+            --muted: #aab7c8;
+            --border: rgba(255, 255, 255, 0.10);
+            --shadow: 0 25px 70px rgba(0, 0, 0, 0.30);
+        }
 
-.tagline{
-    margin-top:10px;
-    color:#666;
-    font-size:1rem;
-}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-.download-btn{
-    display:inline-block;
-    margin-top:25px;
-    background:#28a745;
-    color:white;
-    text-decoration:none;
-    padding:15px 30px;
-    border-radius:10px;
-    font-size:18px;
-    font-weight:bold;
-}
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 90px;
+        }
 
-.download-btn:hover{
-    opacity:.9;
-}
+        body {
+            background:
+                radial-gradient(
+                    circle at 10% 10%,
+                    rgba(242, 198, 109, 0.10),
+                    transparent 28%
+                ),
+                radial-gradient(
+                    circle at 90% 15%,
+                    rgba(57, 199, 122, 0.08),
+                    transparent 26%
+                ),
+                var(--dark);
 
-.screenshot-section{
-    text-align:center;
-    margin-top:40px;
-}
+            color: var(--white);
+            font-family: "Segoe UI", Arial, sans-serif;
+            overflow-x: hidden;
+        }
 
-.screenshot{
-    width:100%;
-    max-width:320px;
-    border-radius:20px;
-    box-shadow:0 4px 15px rgba(0,0,0,0.15);
-}
+        a {
+            text-decoration: none;
+        }
 
-.features{
-    margin-top:50px;
-}
+        section {
+            position: relative;
+        }
 
-.features h2{
-    text-align:center;
-    margin-bottom:20px;
-}
+        .section-padding {
+            padding: 100px 0;
+        }
 
-.feature-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
-    gap:15px;
-}
+        .section-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border: 1px solid rgba(242, 198, 109, 0.30);
+            border-radius: 50px;
+            background: rgba(242, 198, 109, 0.08);
+            color: var(--gold);
+            font-size: 14px;
+            font-weight: 700;
+        }
 
-.card{
-    background:white;
-    padding:20px;
-    border-radius:12px;
-    box-shadow:0 2px 10px rgba(0,0,0,0.08);
-}
+        .section-title {
+            max-width: 800px;
+            margin: 18px auto 16px;
+            font-size: clamp(2rem, 4vw, 3.3rem);
+            line-height: 1.15;
+            letter-spacing: -1.5px;
+            font-weight: 800;
+        }
 
-.card h3{
-    margin-bottom:10px;
-}
+        .section-description {
+            max-width: 700px;
+            margin: 0 auto;
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.8;
+        }
 
-.footer{
-    text-align:center;
-    margin-top:50px;
-    padding:20px;
-    color:#777;
-}
+        /* =========================
+           NAVBAR
+        ========================== */
 
-@media(max-width:600px){
-    h1{
-        font-size:1.6rem;
-    }
+        .main-navbar {
+            background: rgba(7, 17, 31, 0.82);
+            backdrop-filter: blur(18px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            transition: 0.3s ease;
+        }
 
-    .download-btn{
-        width:100%;
-        display:block;
-    }
-}
-</style>
+        .main-navbar.scrolled {
+            background: rgba(7, 17, 31, 0.97);
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.25);
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: white !important;
+            font-size: 21px;
+            font-weight: 800;
+        }
+
+        .navbar-logo {
+            width: 45px;
+            height: 45px;
+            object-fit: cover;
+            border-radius: 13px;
+            border: 1px solid rgba(242, 198, 109, 0.35);
+            background: var(--surface);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .brand-gold {
+            color: var(--gold);
+        }
+
+        .navbar-nav .nav-link {
+            color: #c7d0dd;
+            font-weight: 600;
+            padding: 10px 13px !important;
+            margin: 0 3px;
+            border-radius: 10px;
+            transition: 0.2s;
+        }
+
+        .navbar-nav .nav-link:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .navbar-toggler {
+            border: 1px solid var(--border);
+            box-shadow: none !important;
+        }
+
+        .navbar-toggler-icon {
+            filter: invert(1);
+        }
+
+        /* =========================
+           BUTTONS
+        ========================== */
+
+        .btn-gold {
+            padding: 13px 23px;
+            border: none;
+            border-radius: 13px;
+            color: #121922;
+            background: linear-gradient(
+                135deg,
+                var(--gold),
+                var(--gold-dark)
+            );
+            font-weight: 800;
+            box-shadow: 0 14px 35px rgba(200, 147, 53, 0.25);
+            transition: 0.25s ease;
+        }
+
+        .btn-gold:hover {
+            color: #121922;
+            transform: translateY(-3px);
+            box-shadow: 0 18px 42px rgba(200, 147, 53, 0.35);
+        }
+
+        .btn-outline-custom {
+            padding: 13px 23px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 13px;
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+            font-weight: 700;
+            transition: 0.25s ease;
+        }
+
+        .btn-outline-custom:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.10);
+            transform: translateY(-3px);
+        }
+
+        /* =========================
+           HERO
+        ========================== */
+
+        .hero-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 145px 0 90px;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: "";
+            position: absolute;
+            top: 130px;
+            right: -180px;
+            width: 520px;
+            height: 520px;
+            border-radius: 50%;
+            border: 1px solid rgba(242, 198, 109, 0.10);
+            box-shadow:
+                0 0 0 60px rgba(242, 198, 109, 0.025),
+                0 0 0 120px rgba(242, 198, 109, 0.018);
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 15px;
+            border: 1px solid rgba(57, 199, 122, 0.28);
+            border-radius: 50px;
+            background: rgba(57, 199, 122, 0.08);
+            color: #78e8aa;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .hero-badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 0 6px rgba(57, 199, 122, 0.13);
+        }
+
+        .hero-title {
+            margin: 24px 0;
+            font-size: clamp(3rem, 6.3vw, 5.8rem);
+            line-height: 0.99;
+            letter-spacing: -4px;
+            font-weight: 900;
+        }
+
+        .hero-title span {
+            display: block;
+            color: var(--gold);
+        }
+
+        .hero-description {
+            max-width: 640px;
+            color: var(--muted);
+            font-size: 18px;
+            line-height: 1.9;
+        }
+
+        .hero-trust {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px 22px;
+            margin-top: 25px;
+            color: #d0d8e4;
+            font-size: 14px;
+        }
+
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .check-circle {
+            display: inline-grid;
+            place-items: center;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            background: rgba(57, 199, 122, 0.16);
+            color: #77e6aa;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .hero-image-wrapper {
+            position: relative;
+            max-width: 590px;
+            margin-left: auto;
+        }
+
+        .hero-image-card {
+            overflow: hidden;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 30px;
+            background: linear-gradient(
+                145deg,
+                rgba(255, 255, 255, 0.09),
+                rgba(255, 255, 255, 0.025)
+            );
+            box-shadow: var(--shadow);
+        }
+
+        .hero-image {
+            display: block;
+            width: 100%;
+            min-height: 340px;
+            object-fit: cover;
+            border-radius: 21px;
+            background: var(--surface);
+        }
+
+        .floating-card {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 215px;
+            padding: 14px 17px;
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            border-radius: 17px;
+            background: rgba(10, 23, 39, 0.91);
+            backdrop-filter: blur(15px);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+        }
+
+        .floating-card-top {
+            top: -20px;
+            right: 28px;
+        }
+
+        .floating-card-bottom {
+            left: -28px;
+            bottom: 32px;
+        }
+
+        .floating-icon {
+            display: grid;
+            place-items: center;
+            width: 46px;
+            height: 46px;
+            flex: 0 0 46px;
+            border-radius: 14px;
+            color: #121922;
+            background: linear-gradient(
+                135deg,
+                var(--gold),
+                var(--gold-dark)
+            );
+            font-size: 20px;
+            font-weight: 900;
+        }
+
+        .floating-card small {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .floating-card strong {
+            display: block;
+            margin-top: 3px;
+            font-size: 15px;
+        }
+
+        /* =========================
+           STATS
+        ========================== */
+
+        .stats-section {
+            position: relative;
+            z-index: 5;
+            margin-top: -40px;
+        }
+
+        .stats-box {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 23px;
+            background: rgba(16, 33, 57, 0.91);
+            backdrop-filter: blur(15px);
+            box-shadow: var(--shadow);
+        }
+
+        .stat-item {
+            padding: 27px 18px;
+            text-align: center;
+            border-right: 1px solid var(--border);
+        }
+
+        .stat-item:last-child {
+            border-right: none;
+        }
+
+        .stat-item strong {
+            display: block;
+            color: var(--gold);
+            font-size: 23px;
+            font-weight: 900;
+        }
+
+        .stat-item span {
+            display: block;
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        /* =========================
+           FEATURES
+        ========================== */
+
+        .feature-card {
+            height: 100%;
+            padding: 29px;
+            border: 1px solid var(--border);
+            border-radius: 23px;
+            background: linear-gradient(
+                145deg,
+                rgba(255, 255, 255, 0.055),
+                rgba(255, 255, 255, 0.022)
+            );
+            transition: 0.28s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(242, 198, 109, 0.27);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.23);
+        }
+
+        .feature-icon {
+            display: grid;
+            place-items: center;
+            width: 54px;
+            height: 54px;
+            margin-bottom: 22px;
+            border-radius: 16px;
+            color: #121922;
+            background: linear-gradient(
+                135deg,
+                var(--gold),
+                #dfa43d
+            );
+            font-size: 20px;
+            font-weight: 900;
+        }
+
+        .feature-card h3 {
+            margin-bottom: 11px;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .feature-card p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.75;
+        }
+
+        /* =========================
+           SCREENSHOTS
+        ========================== */
+
+        .screenshots-section {
+            background: linear-gradient(
+                180deg,
+                transparent,
+                rgba(255, 255, 255, 0.018),
+                transparent
+            );
+        }
+
+        .screenshot-card {
+            height: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 27px;
+            background: #091524;
+            box-shadow: 0 22px 55px rgba(0, 0, 0, 0.28);
+            transition: 0.28s ease;
+        }
+
+        .screenshot-card:hover {
+            transform: translateY(-8px);
+            border-color: rgba(242, 198, 109, 0.28);
+        }
+
+        .screenshot-card img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 9 / 18.7;
+            object-fit: cover;
+            object-position: top;
+            border-radius: 20px;
+            background: var(--surface);
+        }
+
+        .screenshot-caption {
+            padding: 14px 5px 5px;
+            text-align: center;
+            color: #dce3ed;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* =========================
+           PROCESS
+        ========================== */
+
+        .process-card {
+            height: 100%;
+            padding: 30px;
+            border: 1px solid var(--border);
+            border-radius: 23px;
+            background: var(--surface);
+        }
+
+        .process-number {
+            display: inline-grid;
+            place-items: center;
+            width: 43px;
+            height: 43px;
+            margin-bottom: 20px;
+            border-radius: 13px;
+            color: #121922;
+            background: var(--gold);
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        .process-card h3 {
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .process-card p {
+            margin: 11px 0 0;
+            color: var(--muted);
+            line-height: 1.75;
+        }
+
+        /* =========================
+           BUSINESS SECTION
+        ========================== */
+
+        .business-panel {
+            overflow: hidden;
+            border: 1px solid rgba(242, 198, 109, 0.20);
+            border-radius: 31px;
+            background:
+                radial-gradient(
+                    circle at 90% 10%,
+                    rgba(242, 198, 109, 0.13),
+                    transparent 27%
+                ),
+                linear-gradient(135deg, #11253e, #091626);
+            box-shadow: var(--shadow);
+        }
+
+        .business-image-wrapper {
+            height: 100%;
+            min-height: 410px;
+            padding: 18px;
+        }
+
+        .business-image-wrapper img {
+            width: 100%;
+            height: 100%;
+            min-height: 370px;
+            object-fit: cover;
+            border-radius: 23px;
+            background: var(--surface);
+        }
+
+        .benefit-list {
+            display: grid;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .benefit-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            color: #dbe3ee;
+        }
+
+        .benefit-item .check-circle {
+            flex: 0 0 21px;
+            margin-top: 2px;
+        }
+
+        /* =========================
+           FAQ
+        ========================== */
+
+        .accordion {
+            --bs-accordion-bg: transparent;
+            --bs-accordion-color: var(--white);
+            --bs-accordion-border-color: var(--border);
+            --bs-accordion-btn-color: var(--white);
+            --bs-accordion-btn-bg: rgba(255, 255, 255, 0.035);
+            --bs-accordion-active-color: var(--gold);
+            --bs-accordion-active-bg: rgba(242, 198, 109, 0.055);
+            --bs-accordion-btn-focus-box-shadow: none;
+        }
+
+        .accordion-item {
+            overflow: hidden;
+            margin-bottom: 14px;
+            border: 1px solid var(--border) !important;
+            border-radius: 17px !important;
+        }
+
+        .accordion-button {
+            padding: 20px 22px;
+            font-weight: 750;
+        }
+
+        .accordion-button::after {
+            filter: invert(1);
+        }
+
+        .accordion-body {
+            padding: 0 22px 22px;
+            color: var(--muted);
+            line-height: 1.8;
+        }
+
+        /* =========================
+           DOWNLOAD AND CONTACT
+        ========================== */
+
+        .download-panel {
+            overflow: hidden;
+            padding: clamp(35px, 6vw, 70px);
+            border: 1px solid rgba(242, 198, 109, 0.23);
+            border-radius: 31px;
+            background:
+                radial-gradient(
+                    circle at 100% 0,
+                    rgba(242, 198, 109, 0.19),
+                    transparent 31%
+                ),
+                linear-gradient(135deg, #12273f, #091522);
+            box-shadow: var(--shadow);
+        }
+
+        .contact-card {
+            height: 100%;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .contact-card small {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--muted);
+        }
+
+        .contact-card a {
+            color: white;
+            font-weight: 800;
+            word-break: break-word;
+        }
+
+        /* =========================
+           FOOTER
+        ========================== */
+
+        footer {
+            border-top: 1px solid var(--border);
+            background: #050d17;
+            color: var(--muted);
+        }
+
+        .footer-link {
+            margin-left: 18px;
+            color: var(--muted);
+        }
+
+        .footer-link:hover {
+            color: var(--gold);
+        }
+
+        /* =========================
+           BROKEN IMAGE PLACEHOLDER
+        ========================== */
+
+        .image-container {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-container.image-error::after {
+            content: attr(data-image-name);
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            text-align: center;
+            color: #d9e1ec;
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(242, 198, 109, 0.14),
+                    rgba(57, 199, 122, 0.06)
+                ),
+                #0d1b2c;
+            font-weight: 700;
+        }
+
+        /* =========================
+           ANIMATION
+        ========================== */
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(25px);
+            transition:
+                opacity 0.65s ease,
+                transform 0.65s ease;
+        }
+
+        .reveal.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* =========================
+           RESPONSIVE
+        ========================== */
+
+        @media (max-width: 991.98px) {
+            .navbar-collapse {
+                margin-top: 13px;
+                padding: 16px;
+                border: 1px solid var(--border);
+                border-radius: 17px;
+                background: #0b1728;
+            }
+
+            .hero-section {
+                min-height: auto;
+                padding-top: 130px;
+            }
+
+            .hero-image-wrapper {
+                margin: 75px auto 0;
+            }
+
+            .floating-card-bottom {
+                left: 10px;
+            }
+
+            .stat-item:nth-child(2) {
+                border-right: none;
+            }
+
+            .stat-item:nth-child(-n+2) {
+                border-bottom: 1px solid var(--border);
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            .section-padding {
+                padding: 76px 0;
+            }
+
+            .hero-section {
+                padding-bottom: 72px;
+            }
+
+            .hero-title {
+                font-size: 2.75rem;
+                letter-spacing: -2px;
+            }
+
+            .hero-description {
+                font-size: 16px;
+            }
+
+            .hero-image-card {
+                border-radius: 23px;
+            }
+
+            .hero-image {
+                min-height: 245px;
+                border-radius: 16px;
+            }
+
+            .hero-image-wrapper {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .hero-image-card {
+                order: 1;
+            }
+
+            .floating-card-top {
+                order: 2;
+            }
+
+            .floating-card-bottom {
+                order: 3;
+            }
+
+            .floating-card {
+                position: static;
+                width: 100%;
+                margin-top: 13px;
+            }
+
+            .stats-section {
+                margin-top: -22px;
+            }
+
+            .stat-item {
+                border-right: none !important;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .stat-item:last-child {
+                border-bottom: none;
+            }
+
+            .screenshot-card {
+                max-width: 300px;
+                margin: auto;
+            }
+
+            .footer-link {
+                display: inline-block;
+                margin: 10px 14px 0 0;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-<div class="container">
+<!-- =========================
+     NAVBAR
+========================== -->
 
-    <section class="hero">
-        <img src="assets/Logo.png" alt="ONTAR_Hisab Logo" class="logo">
-        <img src="assets/logo1.jpg" alt="ONTAR_Hisab Logo" class="logo">
-        <img src="assets/logo2.jpg" alt="ONTAR_Hisab Logo" class="logo">
+<nav id="mainNavbar"
+     class="navbar navbar-expand-lg fixed-top main-navbar">
 
-        <h1>ONTAR_Hisab</h1>
+    <div class="container py-2">
 
-        <p class="tagline">
-            Daily Expense, Income & Balance Tracking App
-        </p>
+        <a class="navbar-brand" href="#home">
 
-        <a href="https://github.com/officialontar/ONTAR_Hisab/releases/tag/v1.1" class="download-btn">
-            📥 Download APK
+            <span class="image-container"
+                  data-image-name="assets/Logo.png পাওয়া যায়নি">
+
+                <img
+                    src="./assets/Logo.png"
+                    alt="ONTAR Hisab Logo"
+                    class="navbar-logo"
+                >
+
+            </span>
+
+            <span>
+                ONTAR
+                <span class="brand-gold">Hisab</span>
+            </span>
+
         </a>
-    </section>
 
-    <section class="screenshot-section">
-        <h2>App Screenshot</h2>
-        <br>
-        <img src="assets/1.png" alt="ONTAR_Hisab Logo" class="screenshot">
-        <img src="assets/2.png" alt="ONTAR_Hisab Logo" class="screenshot">
-        <img src="assets/3.jpeg" alt="ONTAR_Hisab Logo" class="screenshot">
-        <img src="assets/4.jpeg" alt="ONTAR_Hisab Logo" class="screenshot">
-        <img src="assets/5.jpeg" alt="ONTAR_Hisab Logo" class="screenshot">
-    </section>
+        <button
+            class="navbar-toggler"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarMenu"
+            aria-controls="navbarMenu"
+            aria-expanded="false"
+            aria-label="মেনু খুলুন"
+        >
+            <span class="navbar-toggler-icon"></span>
+        </button>
 
-    <section class="features">
-        <h2>Features</h2>
+        <div class="collapse navbar-collapse"
+             id="navbarMenu">
 
-        <div class="feature-grid">
+            <ul class="navbar-nav ms-auto align-items-lg-center">
 
-            <div class="card">
-                <h3>💰 Daily Expense Tracking</h3>
-                <p>Track all daily expenses easily.</p>
+                <li class="nav-item">
+                    <a class="nav-link" href="#home">
+                        হোম
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#features">
+                        ফিচার
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#screenshots">
+                        স্ক্রিনশট
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#how-it-works">
+                        ব্যবহারবিধি
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#faq">
+                        FAQ
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#contact">
+                        যোগাযোগ
+                    </a>
+                </li>
+
+                <li class="nav-item ms-lg-2 mt-2 mt-lg-0">
+
+                    <a
+                        class="btn btn-gold"
+                        href="https://github.com/officialontar/ONTAR_Hisab/releases/latest"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        APK ডাউনলোড
+                    </a>
+
+                </li>
+
+            </ul>
+
+        </div>
+
+    </div>
+
+</nav>
+
+
+<main>
+
+<!-- =========================
+     HERO SECTION
+========================== -->
+
+<section id="home" class="hero-section">
+
+    <div class="container">
+
+        <div class="row align-items-center g-5">
+
+            <div class="col-lg-6 reveal">
+
+                <div class="hero-badge">
+
+                    <span class="hero-badge-dot"></span>
+
+                    মুদি দোকানের ডিজিটাল হিসাব সহকারী
+
+                </div>
+
+                <h1 class="hero-title">
+
+                    দোকানের হিসাব
+
+                    <span>
+                        এখন আরও সহজ
+                    </span>
+
+                </h1>
+
+                <p class="hero-description">
+
+                    দৈনিক বাকি, আয়, ব্যয় এবং বর্তমান ব্যালেন্স—
+                    সবকিছু একটি অ্যাপে গুছিয়ে রাখুন।
+                    ছোট ও মাঝারি মুদি দোকানের নিয়মিত হিসাব
+                    ব্যবস্থাপনাকে সহজ করার জন্য তৈরি
+                    ONTAR Hisab।
+
+                </p>
+
+                <div class="d-flex flex-wrap gap-3 mt-4">
+
+                    <a
+                        class="btn btn-gold btn-lg"
+                        href="https://github.com/officialontar/ONTAR_Hisab/releases/latest"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        সর্বশেষ APK ডাউনলোড
+                    </a>
+
+                    <a
+                        class="btn btn-outline-custom btn-lg"
+                        href="#screenshots"
+                    >
+                        অ্যাপটি দেখুন
+                    </a>
+
+                </div>
+
+                <div class="hero-trust">
+
+                    <div class="trust-item">
+
+                        <span class="check-circle">✓</span>
+
+                        ব্যবহার করা সহজ
+
+                    </div>
+
+                    <div class="trust-item">
+
+                        <span class="check-circle">✓</span>
+
+                        বাংলা-বান্ধব ইন্টারফেস
+
+                    </div>
+
+                    <div class="trust-item">
+
+                        <span class="check-circle">✓</span>
+
+                        ছোট ব্যবসার উপযোগী
+
+                    </div>
+
+                </div>
+
             </div>
 
-            <div class="card">
-                <h3>📈 Income Management</h3>
-                <p>Record and monitor your income.</p>
-            </div>
 
-            <div class="card">
-                <h3>🏦 Balance Overview</h3>
-                <p>See current balance instantly.</p>
-            </div>
+            <div class="col-lg-6 reveal">
 
-            <div class="card">
-                <h3>📱 Mobile Friendly</h3>
-                <p>Works smoothly on Android devices.</p>
-            </div>
+                <div class="hero-image-wrapper">
 
-            <div class="card">
-                <h3>⚡ Fast Performance</h3>
-                <p>Lightweight and easy to use.</p>
-            </div>
+                    <div
+                        class="hero-image-card image-container"
+                        data-image-name="assets/logo2.jpg পাওয়া যায়নি"
+                    >
 
-            <div class="card">
-                <h3>🔒 Secure Data</h3>
-                <p>Your financial data stays protected.</p>
+                        <img
+                            src="./assets/logo2.jpg"
+                            alt="ONTAR Hisab Web Banner"
+                            class="hero-image"
+                        >
+
+                    </div>
+
+                    <div class="floating-card floating-card-top">
+
+                        <div class="floating-icon">
+                            ৳
+                        </div>
+
+                        <div>
+
+                            <small>
+                                দৈনিক হিসাব
+                            </small>
+
+                            <strong>
+                                আয় ও ব্যয় এক নজরে
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                    <div class="floating-card floating-card-bottom">
+
+                        <div class="floating-icon">
+                            ✓
+                        </div>
+
+                        <div>
+
+                            <small>
+                                দ্রুত ব্যবস্থাপনা
+                            </small>
+
+                            <strong>
+                                বাকি ও ব্যালেন্স ট্র্যাকিং
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
             </div>
 
         </div>
-    </section>
 
-    <div class="footer">
-        © 2026 ONTAR_Hisab | Developed by Ontar
     </div>
 
-</div>
+</section>
+
+
+<!-- =========================
+     STATISTICS
+========================== -->
+
+<section class="stats-section">
+
+    <div class="container">
+
+        <div class="stats-box">
+
+            <div class="row g-0">
+
+                <div class="col-12 col-sm-6 col-lg-3 stat-item">
+
+                    <strong>
+                        ১ অ্যাপ
+                    </strong>
+
+                    <span>
+                        সব হিসাব এক জায়গায়
+                    </span>
+
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3 stat-item">
+
+                    <strong>
+                        দ্রুত
+                    </strong>
+
+                    <span>
+                        সহজ ডেটা এন্ট্রি
+                    </span>
+
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3 stat-item">
+
+                    <strong>
+                        গুছানো
+                    </strong>
+
+                    <span>
+                        আয় ও ব্যয়ের রেকর্ড
+                    </span>
+
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3 stat-item">
+
+                    <strong>
+                        Android
+                    </strong>
+
+                    <span>
+                        মোবাইল-ফ্রেন্ডলি ব্যবহার
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     FEATURES
+========================== -->
+
+<section id="features" class="section-padding">
+
+    <div class="container">
+
+        <div class="text-center reveal">
+
+            <span class="section-tag">
+                মূল ফিচারসমূহ
+            </span>
+
+            <h2 class="section-title">
+
+                দোকানের প্রতিদিনের হিসাব রাখুন
+                পরিষ্কার ও নিয়ন্ত্রিত
+
+            </h2>
+
+            <p class="section-description">
+
+                অপ্রয়োজনীয় জটিলতা ছাড়াই প্রয়োজনীয় হিসাবগুলো
+                দ্রুত লিখুন, খুঁজে দেখুন এবং ব্যবসার বর্তমান
+                অবস্থা সম্পর্কে একটি পরিষ্কার ধারণা পান।
+
+            </p>
+
+        </div>
+
+
+        <div class="row g-4 mt-4">
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ৳
+                    </div>
+
+                    <h3>
+                        দৈনিক ব্যয় হিসাব
+                    </h3>
+
+                    <p>
+
+                        দোকানের প্রতিদিনের খরচ আলাদাভাবে
+                        লিখে রাখুন এবং প্রয়োজন অনুযায়ী
+                        আগের রেকর্ড দেখুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ↑
+                    </div>
+
+                    <h3>
+                        আয় ব্যবস্থাপনা
+                    </h3>
+
+                    <p>
+
+                        বিক্রি বা অন্যান্য উৎস থেকে পাওয়া
+                        আয় সহজভাবে এন্ট্রি করে মোট হিসাব
+                        গুছিয়ে রাখুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        B
+                    </div>
+
+                    <h3>
+                        বাকি হিসাব
+                    </h3>
+
+                    <p>
+
+                        ক্রেতার পাওনা বা বাকি হিসাব একটি
+                        নির্দিষ্ট জায়গায় রাখুন, যাতে ভুলে
+                        যাওয়ার ঝুঁকি কমে।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        =
+                    </div>
+
+                    <h3>
+                        ব্যালেন্স ওভারভিউ
+                    </h3>
+
+                    <p>
+
+                        আয় ও ব্যয়ের ভিত্তিতে ব্যবসার
+                        বর্তমান অবস্থার একটি সহজ ও দ্রুত
+                        সারসংক্ষেপ দেখুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ⚡
+                    </div>
+
+                    <h3>
+                        দ্রুত ও হালকা
+                    </h3>
+
+                    <p>
+
+                        প্রতিদিনের কাজে ব্যবহারযোগ্য
+                        পরিচ্ছন্ন ইন্টারফেস এবং সহজ
+                        নেভিগেশন উপভোগ করুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-6 col-lg-4 reveal">
+
+                <article class="feature-card">
+
+                    <div class="feature-icon">
+                        ✓
+                    </div>
+
+                    <h3>
+                        ব্যবসা-বান্ধব ডিজাইন
+                    </h3>
+
+                    <p>
+
+                        মুদি দোকান এবং ছোট ব্যবসার পরিচিত
+                        হিসাবের প্রয়োজন মাথায় রেখে সাজানো
+                        কার্যপ্রবাহ।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     SCREENSHOTS
+========================== -->
+
+<section id="screenshots"
+         class="section-padding screenshots-section">
+
+    <div class="container">
+
+        <div class="text-center reveal">
+
+            <span class="section-tag">
+                অ্যাপ প্রিভিউ
+            </span>
+
+            <h2 class="section-title">
+
+                ONTAR Hisab-এর ইন্টারফেস দেখুন
+
+            </h2>
+
+            <p class="section-description">
+
+                নিচের প্রতিটি ছবি সরাসরি আপনার
+                <strong>assets</strong> ফোল্ডার থেকে দেখানো হবে।
+
+            </p>
+
+        </div>
+
+
+        <div class="row g-4 justify-content-center mt-4">
+
+            <div class="col-10 col-sm-6 col-lg reveal">
+
+                <figure
+                    class="screenshot-card image-container"
+                    data-image-name="assets/1.png পাওয়া যায়নি"
+                >
+
+                    <img
+                        src="./assets/1.png"
+                        alt="ONTAR Hisab App Screenshot 1"
+                        loading="lazy"
+                    >
+
+                    <figcaption class="screenshot-caption">
+                        অ্যাপ পরিচিতি
+                    </figcaption>
+
+                </figure>
+
+            </div>
+
+
+            <div class="col-10 col-sm-6 col-lg reveal">
+
+                <figure
+                    class="screenshot-card image-container"
+                    data-image-name="assets/2.png পাওয়া যায়নি"
+                >
+
+                    <img
+                        src="./assets/2.png"
+                        alt="ONTAR Hisab App Screenshot 2"
+                        loading="lazy"
+                    >
+
+                    <figcaption class="screenshot-caption">
+                        লগইন ও প্রবেশ
+                    </figcaption>
+
+                </figure>
+
+            </div>
+
+
+            <div class="col-10 col-sm-6 col-lg reveal">
+
+                <figure
+                    class="screenshot-card image-container"
+                    data-image-name="assets/3.jpeg পাওয়া যায়নি"
+                >
+
+                    <img
+                        src="./assets/3.jpeg"
+                        alt="ONTAR Hisab App Screenshot 3"
+                        loading="lazy"
+                    >
+
+                    <figcaption class="screenshot-caption">
+                        মূল ড্যাশবোর্ড
+                    </figcaption>
+
+                </figure>
+
+            </div>
+
+
+            <div class="col-10 col-sm-6 col-lg reveal">
+
+                <figure
+                    class="screenshot-card image-container"
+                    data-image-name="assets/4.jpeg পাওয়া যায়নি"
+                >
+
+                    <img
+                        src="./assets/4.jpeg"
+                        alt="ONTAR Hisab App Screenshot 4"
+                        loading="lazy"
+                    >
+
+                    <figcaption class="screenshot-caption">
+                        লেনদেনের তালিকা
+                    </figcaption>
+
+                </figure>
+
+            </div>
+
+
+            <div class="col-10 col-sm-6 col-lg reveal">
+
+                <figure
+                    class="screenshot-card image-container"
+                    data-image-name="assets/5.jpeg পাওয়া যায়নি"
+                >
+
+                    <img
+                        src="./assets/5.jpeg"
+                        alt="ONTAR Hisab App Screenshot 5"
+                        loading="lazy"
+                    >
+
+                    <figcaption class="screenshot-caption">
+                        হিসাব বিশ্লেষণ
+                    </figcaption>
+
+                </figure>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     HOW IT WORKS
+========================== -->
+
+<section id="how-it-works" class="section-padding">
+
+    <div class="container">
+
+        <div class="text-center reveal">
+
+            <span class="section-tag">
+                কীভাবে ব্যবহার করবেন
+            </span>
+
+            <h2 class="section-title">
+                মাত্র তিন ধাপে শুরু করুন
+            </h2>
+
+            <p class="section-description">
+
+                APK ডাউনলোড থেকে প্রতিদিনের হিসাব লেখা পর্যন্ত
+                সম্পূর্ণ প্রক্রিয়াটি সহজ রাখা হয়েছে।
+
+            </p>
+
+        </div>
+
+
+        <div class="row g-4 mt-4">
+
+            <div class="col-md-4 reveal">
+
+                <article class="process-card">
+
+                    <span class="process-number">
+                        ১
+                    </span>
+
+                    <h3>
+                        APK ডাউনলোড করুন
+                    </h3>
+
+                    <p>
+
+                        ওয়েবসাইটের ডাউনলোড বাটনে ক্লিক করে
+                        GitHub Releases থেকে অ্যাপের সর্বশেষ
+                        সংস্করণ ডাউনলোড করুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-4 reveal">
+
+                <article class="process-card">
+
+                    <span class="process-number">
+                        ২
+                    </span>
+
+                    <h3>
+                        অ্যাপ ইনস্টল করুন
+                    </h3>
+
+                    <p>
+
+                        Android ডিভাইসে APK ফাইল খুলুন এবং
+                        প্রয়োজন হলে Install unknown apps
+                        অনুমতি দিয়ে অ্যাপ ইনস্টল করুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+
+            <div class="col-md-4 reveal">
+
+                <article class="process-card">
+
+                    <span class="process-number">
+                        ৩
+                    </span>
+
+                    <h3>
+                        হিসাব লেখা শুরু করুন
+                    </h3>
+
+                    <p>
+
+                        প্রতিদিনের আয়, ব্যয়, বাকি এবং
+                        প্রয়োজনীয় অন্যান্য তথ্য নিয়মিত
+                        এন্ট্রি করুন।
+
+                    </p>
+
+                </article>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     BUSINESS SECTION
+========================== -->
+
+<section class="pb-5">
+
+    <div class="container">
+
+        <div class="business-panel">
+
+            <div class="row align-items-stretch g-0">
+
+                <div class="col-lg-6">
+
+                    <div
+                        class="business-image-wrapper image-container"
+                        data-image-name="assets/logo1.jpg পাওয়া যায়নি"
+                    >
+
+                        <img
+                            src="./assets/logo1.jpg"
+                            alt="ONTAR Hisab App Artwork"
+                            loading="lazy"
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <div class="col-lg-6 d-flex align-items-center">
+
+                    <div class="p-4 p-md-5 reveal">
+
+                        <span class="section-tag">
+                            মুদি দোকানের জন্য
+                        </span>
+
+                        <h2 class="fw-bold display-6 mt-3">
+
+                            খাতা থেকে ডিজিটাল হিসাবের পথে
+
+                        </h2>
+
+                        <p
+                            class="mt-3"
+                            style="
+                                color: var(--muted);
+                                line-height: 1.8;
+                            "
+                        >
+
+                            কাগজের খাতা হারানো, পুরোনো হিসাব
+                            খুঁজতে সময় লাগা অথবা আলাদা আলাদা
+                            জায়গায় তথ্য রাখা—এই সমস্যাগুলো
+                            কমাতে একটি গুছানো ডিজিটাল পদ্ধতি
+                            ব্যবহার করুন।
+
+                        </p>
+
+
+                        <div class="benefit-list">
+
+                            <div class="benefit-item">
+
+                                <span class="check-circle">
+                                    ✓
+                                </span>
+
+                                <span>
+                                    প্রতিদিনের লেনদেন নিয়মিতভাবে সংরক্ষণ
+                                </span>
+
+                            </div>
+
+                            <div class="benefit-item">
+
+                                <span class="check-circle">
+                                    ✓
+                                </span>
+
+                                <span>
+                                    বাকি ও পাওনা মনে রাখার সহজ ব্যবস্থা
+                                </span>
+
+                            </div>
+
+                            <div class="benefit-item">
+
+                                <span class="check-circle">
+                                    ✓
+                                </span>
+
+                                <span>
+                                    আয়-ব্যয়ের বর্তমান অবস্থা দ্রুত দেখা
+                                </span>
+
+                            </div>
+
+                            <div class="benefit-item">
+
+                                <span class="check-circle">
+                                    ✓
+                                </span>
+
+                                <span>
+                                    ছোট ব্যবসার জন্য পরিচ্ছন্ন ও সহজ ব্যবহার
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <a
+                            class="btn btn-gold mt-4"
+                            href="https://github.com/officialontar/ONTAR_Hisab/releases/latest"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            অ্যাপটি সংগ্রহ করুন
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     FAQ
+========================== -->
+
+<section id="faq" class="section-padding">
+
+    <div class="container">
+
+        <div class="row g-5 align-items-start">
+
+            <div class="col-lg-5 reveal">
+
+                <span class="section-tag">
+                    সাধারণ প্রশ্ন
+                </span>
+
+                <h2 class="fw-bold display-5 mt-3">
+
+                    গুরুত্বপূর্ণ কিছু প্রশ্নের উত্তর
+
+                </h2>
+
+                <p
+                    class="mt-3"
+                    style="
+                        color: var(--muted);
+                        line-height: 1.8;
+                    "
+                >
+
+                    ডাউনলোড, ইনস্টল এবং ওয়েবসাইট সম্পর্কিত
+                    সাধারণ প্রশ্নগুলোর উত্তর এখানে দেওয়া হলো।
+
+                </p>
+
+            </div>
+
+
+            <div class="col-lg-7 reveal">
+
+                <div class="accordion" id="faqAccordion">
+
+                    <div class="accordion-item">
+
+                        <h3 class="accordion-header">
+
+                            <button
+                                class="accordion-button"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#faqOne"
+                            >
+                                APK কোথা থেকে ডাউনলোড করব?
+                            </button>
+
+                        </h3>
+
+                        <div
+                            id="faqOne"
+                            class="accordion-collapse collapse show"
+                            data-bs-parent="#faqAccordion"
+                        >
+
+                            <div class="accordion-body">
+
+                                ওয়েবসাইটের “APK ডাউনলোড” বাটন
+                                আপনাকে GitHub Releases-এর সর্বশেষ
+                                সংস্করণে নিয়ে যাবে।
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="accordion-item">
+
+                        <h3 class="accordion-header">
+
+                            <button
+                                class="accordion-button collapsed"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#faqTwo"
+                            >
+                                ছবি দেখা না গেলে কী পরীক্ষা করব?
+                            </button>
+
+                        </h3>
+
+                        <div
+                            id="faqTwo"
+                            class="accordion-collapse collapse"
+                            data-bs-parent="#faqAccordion"
+                        >
+
+                            <div class="accordion-body">
+
+                                index.html-এর পাশে assets ফোল্ডার
+                                আছে কি না, ছবিগুলো GitHub-এ upload
+                                এবং commit হয়েছে কি না এবং বড়-ছোট
+                                হাতের অক্ষরসহ filename হুবহু মিলছে
+                                কি না পরীক্ষা করুন।
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="accordion-item">
+
+                        <h3 class="accordion-header">
+
+                            <button
+                                class="accordion-button collapsed"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#faqThree"
+                            >
+                                ওয়েবসাইট আপডেট হতে কত সময় লাগে?
+                            </button>
+
+                        </h3>
+
+                        <div
+                            id="faqThree"
+                            class="accordion-collapse collapse"
+                            data-bs-parent="#faqAccordion"
+                        >
+
+                            <div class="accordion-body">
+
+                                GitHub-এ নতুন commit দেওয়ার পর Pages
+                                deployment শেষ হলে পরিবর্তন দেখা যাবে।
+                                প্রয়োজন হলে ব্রাউজারে Ctrl + F5 দিয়ে
+                                hard refresh করুন।
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="accordion-item">
+
+                        <h3 class="accordion-header">
+
+                            <button
+                                class="accordion-button collapsed"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#faqFour"
+                            >
+                                সাইটটি কি মোবাইলে ভালোভাবে দেখা যাবে?
+                            </button>
+
+                        </h3>
+
+                        <div
+                            id="faqFour"
+                            class="accordion-collapse collapse"
+                            data-bs-parent="#faqAccordion"
+                        >
+
+                            <div class="accordion-body">
+
+                                হ্যাঁ। ওয়েবসাইটটি responsiveভাবে তৈরি,
+                                তাই মোবাইল, ট্যাবলেট এবং কম্পিউটারে
+                                সুন্দরভাবে মানিয়ে যাবে।
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     CONTACT AND DOWNLOAD
+========================== -->
+
+<section id="contact"
+         class="section-padding pt-0">
+
+    <div class="container">
+
+        <div class="download-panel reveal">
+
+            <div class="row align-items-center g-4">
+
+                <div class="col-lg-7">
+
+                    <span class="section-tag">
+                        এখনই শুরু করুন
+                    </span>
+
+                    <h2 class="fw-bold display-5 mt-3">
+
+                        দোকানের দৈনিক হিসাবকে
+                        করুন আরও গুছানো
+
+                    </h2>
+
+                    <p
+                        class="mt-3 mb-0"
+                        style="
+                            color: var(--muted);
+                            line-height: 1.8;
+                        "
+                    >
+
+                        সর্বশেষ APK ডাউনলোড করুন অথবা
+                        অ্যাপের কোনো সমস্যা ও পরামর্শ
+                        জানাতে GitHub Issues ব্যবহার করুন।
+
+                    </p>
+
+                </div>
+
+
+                <div class="col-lg-5">
+
+                    <div class="d-grid gap-3">
+
+                        <a
+                            class="btn btn-gold btn-lg"
+                            href="https://github.com/officialontar/ONTAR_Hisab/releases/latest"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            সর্বশেষ APK ডাউনলোড
+                        </a>
+
+                        <a
+                            class="btn btn-outline-custom btn-lg"
+                            href="https://github.com/officialontar/ONTAR_Hisab/issues"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            সমস্যা বা পরামর্শ জানান
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="row g-3 mt-4">
+
+                <div class="col-md-6">
+
+                    <div class="contact-card">
+
+                        <small>
+                            GitHub Repository
+                        </small>
+
+                        <a
+                            href="https://github.com/officialontar/ONTAR_Hisab"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            github.com/officialontar/ONTAR_Hisab
+                        </a>
+
+                    </div>
+
+                </div>
+
+
+                <div class="col-md-6">
+
+                    <div class="contact-card">
+
+                        <small>
+                            লাইভ ওয়েবসাইট
+                        </small>
+
+                        <a
+                            href="https://officialontar.github.io/ONTAR_Hisab/"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            officialontar.github.io/ONTAR_Hisab/
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+</main>
+
+
+<!-- =========================
+     FOOTER
+========================== -->
+
+<footer>
+
+    <div class="container py-4">
+
+        <div
+            class="d-md-flex justify-content-between
+                   align-items-center text-center text-md-start"
+        >
+
+            <div>
+
+                © <span id="currentYear"></span>
+                ONTAR Hisab.
+                Developed by Ontar.
+
+            </div>
+
+            <div class="mt-2 mt-md-0">
+
+                <a class="footer-link" href="#features">
+                    ফিচার
+                </a>
+
+                <a class="footer-link" href="#screenshots">
+                    স্ক্রিনশট
+                </a>
+
+                <a class="footer-link" href="#contact">
+                    যোগাযোগ
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</footer>
+
+
+<!-- Bootstrap JavaScript -->
+<script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+</script>
+
+
+<script>
+    /* Current year */
+
+    document.getElementById("currentYear").textContent =
+        new Date().getFullYear();
+
+
+    /* Navbar background after scroll */
+
+    const mainNavbar =
+        document.getElementById("mainNavbar");
+
+    function updateNavbar() {
+
+        if (window.scrollY > 20) {
+
+            mainNavbar.classList.add("scrolled");
+
+        } else {
+
+            mainNavbar.classList.remove("scrolled");
+
+        }
+
+    }
+
+    updateNavbar();
+
+    window.addEventListener(
+        "scroll",
+        updateNavbar,
+        { passive: true }
+    );
+
+
+    /* Close mobile menu after clicking a link */
+
+    document
+        .querySelectorAll("#navbarMenu .nav-link")
+        .forEach(function (link) {
+
+            link.addEventListener(
+                "click",
+                function () {
+
+                    const menu =
+                        document.getElementById("navbarMenu");
+
+                    const menuInstance =
+                        bootstrap.Collapse.getInstance(menu);
+
+                    if (menuInstance) {
+
+                        menuInstance.hide();
+
+                    }
+
+                }
+            );
+
+        });
+
+
+    /* Show a professional placeholder
+       instead of broken image icon */
+
+    document
+        .querySelectorAll(".image-container img")
+        .forEach(function (image) {
+
+            image.addEventListener(
+                "error",
+                function () {
+
+                    image.style.visibility = "hidden";
+
+                    const parent =
+                        image.closest(".image-container");
+
+                    if (parent) {
+
+                        parent.classList.add("image-error");
+
+                    }
+
+                }
+            );
+
+        });
+
+
+    /* Scroll reveal animation */
+
+    const revealObserver =
+        new IntersectionObserver(
+
+            function (entries) {
+
+                entries.forEach(function (entry) {
+
+                    if (entry.isIntersecting) {
+
+                        entry.target.classList.add("show");
+
+                        revealObserver.unobserve(
+                            entry.target
+                        );
+
+                    }
+
+                });
+
+            },
+
+            {
+                threshold: 0.12
+            }
+
+        );
+
+
+    document
+        .querySelectorAll(".reveal")
+        .forEach(function (element) {
+
+            revealObserver.observe(element);
+
+        });
+
+</script>
 
 </body>
 </html>
