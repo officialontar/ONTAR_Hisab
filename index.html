@@ -14,10 +14,8 @@
     <title>ONTAR Hisab | দোকানের ডিজিটাল হিসাব</title>
 
     <!-- Bootstrap CSS -->
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    >
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 
     <style>
         :root {
@@ -860,9 +858,119 @@
                 margin: 10px 14px 0 0;
             }
         }
+		/* =================================
+   SOCIAL MEDIA SECTION
+================================= */
+
+.social-section {
+    width: 100%;
+    padding: 30px 20px;
+    background: #050505;
+    border-radius: 22px;
+}
+
+.social-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.social-title {
+    margin-right: 4px;
+    color: #b8b8b8;
+    font-size: 20px;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.social-icon {
+    width: 62px;
+    height: 62px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 50%;
+
+    background: #1b1b1b;
+    color: #ffbd2e;
+
+    font-size: 28px;
+    text-decoration: none;
+
+    box-shadow:
+        0 8px 22px rgba(0, 0, 0, 0.25);
+
+    transition:
+        transform 0.25s ease,
+        background 0.25s ease,
+        color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.social-icon:hover {
+    color: #111111;
+    background: #ffbd2e;
+
+    transform: translateY(-6px);
+
+    box-shadow:
+        0 14px 30px rgba(255, 189, 46, 0.25);
+}
+
+.social-icon:focus-visible {
+    outline: 3px solid rgba(255, 189, 46, 0.45);
+    outline-offset: 4px;
+}
+
+/* Tablet */
+
+@media (max-width: 768px) {
+
+    .social-section {
+        padding: 26px 15px;
+    }
+
+    .social-wrapper {
+        gap: 12px;
+    }
+
+    .social-title {
+        width: 100%;
+        margin: 0 0 5px;
+        text-align: center;
+        font-size: 18px;
+    }
+
+    .social-icon {
+        width: 55px;
+        height: 55px;
+        font-size: 25px;
+    }
+}
+
+/* Small mobile */
+
+@media (max-width: 420px) {
+
+    .social-wrapper {
+        gap: 10px;
+    }
+
+    .social-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 21px;
+    }
+}
+		
     </style>
 </head>
-
+	
 <body>
 
 <!-- =========================
@@ -2071,41 +2179,97 @@
                 </div>
 
 
-                <div class="col-md-6">
+                <div class="social-wrapper">
 
-                    <div class="container">
-					<br>
-					<br>
-					<div class="row justify-content-center">
-						<div class="col-md-7 ftco-animate text-center">
-							<h2>Have a<span> Question? </span> <a href="https://www.facebook.com/officialontar"
-									target="_blank" class="btn btn-primary py-3 px-5">Click Here</a> </h2>
-						</div>
-					</div>
-					<br>
-					<ul class="ftco-footer-social list-unstyled d-flex justify-content-center align-items-center mb-0">
-						<li class="ftco-animate normal-txt">Find me on </li>
-						<li class="ftco-animate"><a href="https://www.youtube.com/@officialontar" target="_blank"><span
-									class="icon-youtube"></span></a></li>
-						<li class="ftco-animate"><a href="https://www.linkedin.com/in/officalontar/"
-								target="_blank"><span class="icon-linkedin"></span></a></li>
-						<li class="ftco-animate"><a href="https://twitter.com/officialontar" target="_blank"><span
-									class="icon-twitter"></span></a></li>
-						<li class="ftco-animate"><a href="https://www.facebook.com/officialontar" target="_blank"><span
-									class="icon-facebook"></span></a></li>
-						<li class="ftco-animate"><a href="https://www.instagram.com/officialontar/"
-								target="_blank"><span class="icon-instagram"></span></a></li>
-						<li class="ftco-animate"><a href="https://wa.me/+8801974068788" target="_blank"><span
-									class="icon-whatsapp"></span></a></li>
-						<li class="ftco-animate"><a href="https://www.behance.net/officialontar" target="_blank"><span
-									class="icon-behance"></span></a></li>
-					</ul>
-					<br>
-				</div>
+        <span class="social-title">
+            Find me on
+        </span>
 
-                </div>
+        <!-- YouTube -->
+        <a
+            href="https://www.youtube.com/@officialontar"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="YouTube"
+            title="YouTube"
+        >
+            <i class="fa-brands fa-youtube"></i>
+        </a>
 
-            </div>
+        <!-- LinkedIn -->
+        <a
+            href="https://www.linkedin.com/in/officalontar/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="LinkedIn"
+            title="LinkedIn"
+        >
+            <i class="fa-brands fa-linkedin-in"></i>
+        </a>
+
+        <!-- X / Twitter -->
+        <a
+            href="https://twitter.com/officialontar"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="X"
+            title="X / Twitter"
+        >
+            <i class="fa-brands fa-x-twitter"></i>
+        </a>
+
+        <!-- Facebook -->
+        <a
+            href="https://www.facebook.com/officialontar"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="Facebook"
+            title="Facebook"
+        >
+            <i class="fa-brands fa-facebook-f"></i>
+        </a>
+
+        <!-- Instagram -->
+        <a
+            href="https://www.instagram.com/officialontar/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="Instagram"
+            title="Instagram"
+        >
+            <i class="fa-brands fa-instagram"></i>
+        </a>
+
+        <!-- WhatsApp -->
+        <a
+            href="https://wa.me/8801974068788"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="WhatsApp"
+            title="WhatsApp"
+        >
+            <i class="fa-brands fa-whatsapp"></i>
+        </a>
+
+        <!-- Behance -->
+        <a
+            href="https://www.behance.net/officialontar"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="social-icon"
+            aria-label="Behance"
+            title="Behance"
+        >
+            <i class="fa-brands fa-behance"></i>
+        </a>
+
+    </div>
 
         </div>
 
