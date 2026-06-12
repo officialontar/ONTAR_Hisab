@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.*
 
 data class SyncPayload(
     val user: User,
@@ -22,7 +23,7 @@ data class SyncPayload(
 
 object CloudSyncEngine {
     private const val TAG = "CloudSyncEngine"
-    private const val BUCKET_ID = "hisab_khata_sync_v2_918237"
+    private const val BUCKET_ID = "6h9NTtLDbTocxLkyC7Jpv6"
     private const val BASE_URL = "https://kvdb.io/$BUCKET_ID/"
 
     private val moshi = Moshi.Builder()
@@ -32,9 +33,9 @@ object CloudSyncEngine {
     private val payloadAdapter = moshi.adapter(SyncPayload::class.java)
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .writeTimeout(4, TimeUnit.SECONDS)
         .build()
 
     private fun getSanitizedKey(email: String): String {
@@ -134,61 +135,70 @@ object CloudSyncEngine {
      * Upload redirects to resolve phones and names back to primary email
      */
     private fun uploadRedirectsForUser(user: User) {
-        val primaryEmail = user.email.trim().lowercase()
-        val redirectIdentifiers = mutableSetOf<String>()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val primaryEmail = user.email.trim().lowercase()
+            val redirectIdentifiers = mutableSetOf<String>()
 
-        // Add primary phones
-        user.phone.split(",").forEach {
-            val clean = it.trim().lowercase()
-            if (clean.isNotEmpty() && clean != primaryEmail) {
-                redirectIdentifiers.add(clean)
-                val ultraClean = clean.replace("-", "").replace(" ", "")
-                if (ultraClean.isNotEmpty() && ultraClean != primaryEmail) {
-                    redirectIdentifiers.add(ultraClean)
-                }
-            }
-        }
-
-        // Add joint owners
-        try {
-            val owners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
-            owners.forEach { owner ->
-                val oPhone = owner.phone.trim().lowercase()
-                val oEmail = owner.email.trim().lowercase()
-                if (oPhone.isNotEmpty() && oPhone != primaryEmail) {
-                    redirectIdentifiers.add(oPhone)
-                    val ultraClean = oPhone.replace("-", "").replace(" ", "")
+            // Add primary phones
+            user.phone.split(",").forEach {
+                val clean = it.trim().lowercase()
+                if (clean.isNotEmpty() && clean != primaryEmail) {
+                    redirectIdentifiers.add(clean)
+                    val ultraClean = clean.replace("-", "").replace(" ", "").replace("+", "")
                     if (ultraClean.isNotEmpty() && ultraClean != primaryEmail) {
                         redirectIdentifiers.add(ultraClean)
+                        if (ultraClean.length >= 11) {
+                            redirectIdentifiers.add(ultraClean.takeLast(11))
+                        }
                     }
                 }
-                if (oEmail.isNotEmpty() && oEmail != primaryEmail) {
-                    redirectIdentifiers.add(oEmail)
-                }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse owner names for redirect upload", e)
-        }
 
-        // Upload redirect keys to kvdb.io
-        redirectIdentifiers.forEach { id ->
-            val redirectKey = getSanitizedRedirectKey(id)
-            val url = "$BASE_URL$redirectKey"
+            // Add joint owners
             try {
-                val requestBody = primaryEmail.toRequestBody("text/plain".toMediaType())
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBody)
-                    .build()
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        Log.d(TAG, "Uploaded user mapping redirect for $id -> $primaryEmail")
-                    } else {
-                        Log.e(TAG, "Failed to upload redirect for $id, code ${response.code}")
+                val owners = com.example.data.OwnerParser.deserialize(user.ownerName, user.phone, user.email)
+                owners.forEach { owner ->
+                    val oPhone = owner.phone.trim().lowercase()
+                    val oEmail = owner.email.trim().lowercase()
+                    if (oPhone.isNotEmpty() && oPhone != primaryEmail) {
+                        redirectIdentifiers.add(oPhone)
+                        val ultraClean = oPhone.replace("-", "").replace(" ", "").replace("+", "")
+                        if (ultraClean.isNotEmpty() && ultraClean != primaryEmail) {
+                            redirectIdentifiers.add(ultraClean)
+                            if (ultraClean.length >= 11) {
+                                redirectIdentifiers.add(ultraClean.takeLast(11))
+                            }
+                        }
+                    }
+                    if (oEmail.isNotEmpty() && oEmail != primaryEmail) {
+                        redirectIdentifiers.add(oEmail)
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Exception saving redirect for $id", e)
+                Log.e(TAG, "Failed to parse owner names for redirect upload", e)
+            }
+
+            // Upload redirect keys to kvdb.io in parallel/asynchronously
+            redirectIdentifiers.forEach { id ->
+                val redirectKey = getSanitizedRedirectKey(id)
+                val url = "$BASE_URL$redirectKey"
+                try {
+                    val requestBody = primaryEmail.toRequestBody("text/plain".toMediaType())
+                    val request = Request.Builder()
+                        .url(url)
+                        .post(requestBody)
+                        .build()
+
+                    okHttpClient.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            Log.d(TAG, "Uploaded user mapping redirect for $id -> $primaryEmail")
+                        } else {
+                            Log.e(TAG, "Failed to upload redirect for $id, code ${response.code}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Exception saving redirect for $id", e)
+                }
             }
         }
     }
@@ -217,42 +227,80 @@ object CloudSyncEngine {
             return fetchPayloadByUrl(resolvedUrl)
         }
 
+        // 3. Try normalizing raw identifier to 11-digit mobile number if applicable
+        val ultraCleanRaw = trimmedRaw.replace("-", "").replace(" ", "").replace("+", "")
+        if (ultraCleanRaw.length >= 11) {
+            val shortPhone = ultraCleanRaw.takeLast(11)
+            val shortRedirectKey = getSanitizedRedirectKey(shortPhone)
+            val shortRedirectUrl = "$BASE_URL$shortRedirectKey"
+            val shortRedirectedEmail = fetchStringByUrl(shortRedirectUrl)
+            if (!shortRedirectedEmail.isNullOrBlank()) {
+                val resolvedUrl = "$BASE_URL${getSanitizedKey(shortRedirectedEmail)}"
+                return fetchPayloadByUrl(resolvedUrl)
+            }
+        }
+
         return null
     }
 
     /**
      * Fetch all registered users
      */
-    suspend fun fetchAllRegisteredUsers(): List<User> {
-        val list = mutableListOf<User>()
+    suspend fun fetchAllRegisteredUsers(): List<User> = coroutineScope {
+        val list = java.util.Collections.synchronizedList(mutableListOf<User>())
         try {
             val url = BASE_URL
             val request = Request.Builder().url(url).get().build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val raw = response.body?.string() ?: return emptyList()
-                    val jsonKeysRegex = "\"[^\"]+\"".toRegex()
-                    val keys = jsonKeysRegex.findAll(raw)
-                        .map { it.value.replace("\"", "") }
-                        .filter { it.startsWith("user_") }
-                        .toList()
+                    val raw = response.body?.string() ?: return@coroutineScope emptyList()
                     
-                    keys.forEach { key ->
-                        try {
-                            val userPayloadUrl = "$BASE_URL$key"
-                            val payload = fetchPayloadByUrl(userPayloadUrl)
-                            if (payload != null) {
-                                list.add(payload.user)
+                    // Support standard plaintext newline formats as well as JSON listings
+                    val cleanRaw = raw.replace("[", "").replace("]", "")
+                    val keys = cleanRaw.split(Regex("[\n,\r]"))
+                        .map { it.replace("\"", "").trim() }
+                        .filter { it.startsWith("user_") && it.isNotBlank() }
+                        .distinct()
+                    
+                    val deferreds = keys.map { key ->
+                        async(Dispatchers.IO) {
+                            try {
+                                val userPayloadUrl = "$BASE_URL$key"
+                                val payload = fetchPayloadByUrl(userPayloadUrl)
+                                if (payload != null) {
+                                    list.add(payload.user)
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error parsing user key data: $key", e)
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing user key data: $key", e)
                         }
                     }
+                    deferreds.awaitAll()
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to list keys from kvdb.io", e)
         }
-        return list
+        list.toList()
+    }
+
+    /**
+     * Delete user payload from kvdb.io
+     */
+    suspend fun deletePayload(email: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val key = getSanitizedKey(email)
+            val url = "$BASE_URL$key"
+            val request = Request.Builder()
+                .url(url)
+                .delete()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Network exception deleting sync payload", e)
+            false
+        }
     }
 }

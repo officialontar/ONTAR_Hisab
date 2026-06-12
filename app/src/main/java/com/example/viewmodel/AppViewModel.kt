@@ -246,6 +246,18 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _isCloudSyncing = MutableStateFlow(false)
     val isCloudSyncing: StateFlow<Boolean> = _isCloudSyncing.asStateFlow()
 
+    fun getDeviceName(): String {
+        val manufacturer = android.os.Build.MANUFACTURER ?: "unknown"
+        val model = android.os.Build.MODEL ?: "device"
+        val capMan = manufacturer.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val capMod = model.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        return if (capMod.lowercase().startsWith(capMan.lowercase())) {
+            capMod
+        } else {
+            "$capMan $capMod"
+        }
+    }
+
     fun triggerCloudSync(isManual: Boolean = true) {
         val user = _currentUser.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -259,6 +271,57 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             try {
                 // 1. Download payload from Cloud
                 val remotePayload = com.example.api.CloudSyncEngine.downloadPayload(user.email)
+                
+                var activeUser = user
+                if (remotePayload != null) {
+                    val remoteUser = remotePayload.user
+                    
+                    // Check blocks
+                    val currentDevice = getDeviceName()
+                    val blockedList = try {
+                        val arr = org.json.JSONArray(remoteUser.blockedDevicesJson ?: "[]")
+                        List(arr.length()) { i -> arr.getString(i) }
+                    } catch(e: Exception) { emptyList<String>() }
+                    
+                    val isAlwaysAdmin = remoteUser.email.trim().lowercase() == "mdanisujjamanontar@gmail.com"
+                    if ((remoteUser.isBlocked || blockedList.contains(currentDevice)) && !isAlwaysAdmin) {
+                        repository.updateUser(remoteUser)
+                        withContext(Dispatchers.Main) {
+                            _currentUser.value = remoteUser
+                            _isCloudSyncing.value = false
+                        }
+                        return@launch
+                    }
+                    
+                    // Update active devices lists
+                    val activeArr = try {
+                        org.json.JSONArray(remoteUser.activeDevicesJson ?: "[]")
+                    } catch(e: Exception) { org.json.JSONArray() }
+                    
+                    var hasOurDevice = false
+                    for (i in 0 until activeArr.length()) {
+                        if (activeArr.getString(i) == currentDevice) {
+                            hasOurDevice = true
+                            break
+                        }
+                    }
+                    if (!hasOurDevice) {
+                        activeArr.put(currentDevice)
+                    }
+                    
+                    val updatedUser = remoteUser.copy(
+                        activeDevicesJson = activeArr.toString(),
+                        registerDevice = remoteUser.registerDevice ?: currentDevice,
+                        isBlocked = false // safety
+                    )
+                    
+                    repository.updateUser(updatedUser)
+                    activeUser = updatedUser
+                    
+                    withContext(Dispatchers.Main) {
+                        _currentUser.value = updatedUser
+                    }
+                }
                 
                 // 2. Prepare local sets
                 val localStock = stockItems.value
@@ -382,7 +445,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 val finalTx = repository.getTransactions(user.email).firstOrNull() ?: emptyList()
 
                 val uploadPayload = com.example.api.SyncPayload(
-                    user = user,
+                    user = activeUser,
                     stockItems = finalStock,
                     customers = finalCustomers,
                     dealers = finalDealers,
@@ -436,6 +499,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     _authStateMessage.value = if (_isBengali.value) "এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে!" else "Email already registered!"
                     return@launch
                 }
+                
                 val newUser = User(
                     email = email.trim(),
                     shopName = shopName.trim(),
@@ -443,27 +507,98 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     passwordHash = pin.trim(), // store simply for offline/local flow
                     ownerName = ownerName.trim(),
                     profilePicture = profilePic,
-                    shopPicture = shopPic
+                    shopPicture = shopPic,
+                    ipAddress = "Unknown",
+                    registerLocation = "Unknown",
+                    registerDevice = getDeviceName(),
+                    activeDevicesJson = org.json.JSONArray().put(getDeviceName()).toString(),
+                    blockedDevicesJson = "[]",
+                    isBlocked = false
                 )
                 repository.registerUser(newUser)
                 
-                // Immediate Cloud Upload
-                val initialPayload = com.example.api.SyncPayload(
-                    user = newUser,
-                    stockItems = emptyList(),
-                    customers = emptyList(),
-                    dealers = emptyList(),
-                    transactions = emptyList(),
-                    timestamp = System.currentTimeMillis()
-                )
-                com.example.api.CloudSyncEngine.uploadPayload(newUser.email, initialPayload)
+                // Immediate Background Cloud Upload (makes registration instant)
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val initialPayload = com.example.api.SyncPayload(
+                            user = newUser,
+                            stockItems = emptyList(),
+                            customers = emptyList(),
+                            dealers = emptyList(),
+                            transactions = emptyList(),
+                            timestamp = System.currentTimeMillis()
+                        )
+                        com.example.api.CloudSyncEngine.uploadPayload(newUser.email, initialPayload)
+                    } catch(e: Exception) {
+                        Log.e("AppViewModel", "Failed registration background upload", e)
+                    }
+                }
 
                 _currentUser.value = newUser
                 _currentScreen.value = "DASHBOARD"
                 _authStateMessage.value = null
                 triggerCloudSync(isManual = false)
+                
                 withContext(Dispatchers.Main) {
                     showToast(if (_isBengali.value) "রেজিস্ট্রেশন সফল হয়েছে!" else "Registration successful!")
+                }
+
+                // Asynchronously fetch IP and Location detail mapping in the background
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        var ip = "Unknown"
+                        var loc = "Unknown"
+                        try {
+                            val url = java.net.URL("https://ip-api.com/json")
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 1500
+                            conn.readTimeout = 1500
+                            val resText = conn.inputStream.bufferedReader().use { it.readText() }
+                            val obj = org.json.JSONObject(resText)
+                            if (obj.optString("status") == "success") {
+                                ip = obj.optString("query", "Unknown")
+                                val city = obj.optString("city", "")
+                                val rName = obj.optString("regionName", "")
+                                val cName = obj.optString("country", "")
+                                val locParts = listOf(city, rName, cName).filter { it.isNotBlank() }
+                                loc = if (locParts.isNotEmpty()) locParts.joinToString(", ") else "Unknown"
+                            }
+                        } catch(e: Exception) {
+                            try {
+                                val url = java.net.URL("https://api.ipify.org")
+                                val conn = url.openConnection() as java.net.HttpURLConnection
+                                conn.connectTimeout = 1500
+                                conn.readTimeout = 1500
+                                val ipOnly = conn.inputStream.bufferedReader().use { it.readText() }
+                                if (ipOnly.isNotBlank()) {
+                                    ip = ipOnly.trim()
+                                }
+                            } catch(ex: Exception) {}
+                        }
+
+                        if (ip != "Unknown" || loc != "Unknown") {
+                            // Update local and remote with real geolocation details
+                            val current = _currentUser.value
+                            if (current != null && current.email == email.trim()) {
+                                val updatedUser = current.copy(ipAddress = ip, registerLocation = loc)
+                                repository.updateUser(updatedUser)
+                                _currentUser.value = updatedUser
+
+                                // Sync back to cloud payload in the background
+                                val payload = com.example.api.SyncPayload(
+                                    user = updatedUser,
+                                    stockItems = repository.getStockItems(updatedUser.email).firstOrNull() ?: emptyList(),
+                                    customers = repository.getCustomers(updatedUser.email).firstOrNull() ?: emptyList(),
+                                    dealers = repository.getDealers(updatedUser.email).firstOrNull() ?: emptyList(),
+                                    transactions = repository.getTransactions(updatedUser.email).firstOrNull() ?: emptyList(),
+                                    timestamp = System.currentTimeMillis()
+                                )
+                                com.example.api.CloudSyncEngine.uploadPayload(updatedUser.email, payload)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AppViewModel", "Failed to resolve IP asynchronously", e)
+                    }
                 }
             } catch (e: Exception) {
                 _authStateMessage.value = e.message ?: "Error"
@@ -495,7 +630,13 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     passwordHash = pin.trim(),
                     profilePicture = profilePic,
                     ownerName = ownerName.trim(),
-                    shopPicture = shopPic
+                    shopPicture = shopPic,
+                    ipAddress = oldUser?.ipAddress,
+                    registerLocation = oldUser?.registerLocation,
+                    registerDevice = oldUser?.registerDevice,
+                    activeDevicesJson = oldUser?.activeDevicesJson,
+                    blockedDevicesJson = oldUser?.blockedDevicesJson,
+                    isBlocked = oldUser?.isBlocked ?: false
                 )
 
                 if (oldUser != null && oldUser.email != targetEmail) {
@@ -545,6 +686,78 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 Log.e("AppViewModel", "Profile update error", e)
                 withContext(Dispatchers.Main) {
                     showToast(if (_isBengali.value) "স্থানীয়ভাবে সেভ হয়েছে কিন্তু ক্লাউড আপডেট ব্যর্থ হয়েছে" else "Saved locally but cloud update failed")
+                }
+            }
+        }
+    }
+
+    fun adminUpdateUserProfileAndSync(
+        targetUser: User,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Update locally first in local DB
+                repository.updateUser(targetUser)
+                
+                // Update on Cloud KVDB.io
+                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetUser.email)
+                val newPayload = if (cloudPayload != null) {
+                    cloudPayload.copy(user = targetUser, timestamp = System.currentTimeMillis())
+                } else {
+                    com.example.api.SyncPayload(
+                        user = targetUser,
+                        stockItems = emptyList(),
+                        customers = emptyList(),
+                        dealers = emptyList(),
+                        transactions = emptyList(),
+                        timestamp = System.currentTimeMillis()
+                    )
+                }
+                val success = com.example.api.CloudSyncEngine.uploadPayload(targetUser.email, newPayload)
+                
+                // If it is our current user, update their state
+                if (_currentUser.value?.email?.lowercase() == targetUser.email.lowercase()) {
+                    withContext(Dispatchers.Main) {
+                        _currentUser.value = targetUser
+                    }
+                }
+                
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        onComplete(true, if (_isBengali.value) "সাফল্যের সাথে তথ্য আপডেট করা হয়েছে এবং ক্লাউডে সিঙ্ক হয়েছে!" else "Successfully updated information and synced to cloud!")
+                    } else {
+                        onComplete(true, if (_isBengali.value) "স্থানীয়ভাবে সফলভাবে সেভ হয়েছে কিন্তু ক্লাউড আপডেট ব্যর্থ হয়েছে" else "Successfully updated locally but cloud write failed")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Admin profile update error", e)
+                withContext(Dispatchers.Main) {
+                    onComplete(false, e.message ?: "Error updating user")
+                }
+            }
+        }
+    }
+
+    fun adminDeleteUserAndSync(
+        email: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Deleting locally
+                repository.deleteUserByEmail(email)
+                
+                // Deleting on cloud
+                val success = com.example.api.CloudSyncEngine.deletePayload(email)
+                
+                withContext(Dispatchers.Main) {
+                    onComplete(true, if (_isBengali.value) "সাফল্যের সাথে অ্যাকাউন্টটি ডিলিট করা হয়েছে!" else "Account deleted successfully from local and cloud!")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Admin delete user error", e)
+                withContext(Dispatchers.Main) {
+                    onComplete(false, e.message ?: "Deletion failed")
                 }
             }
         }
@@ -844,6 +1057,13 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                 if (user == null || user.passwordHash != pin.trim()) {
                     _authStateMessage.value = if (_isBengali.value) "ভুল ইমেইল/মোবাইল অথবা পিন!" else "Incorrect login details or pin!"
                     return@launch
+                }
+
+                if (user != null && user.email.trim().lowercase() == "mdanisujjamanontar@gmail.com") {
+                    if (user.isBlocked || user.blockedDevicesJson != "[]") {
+                        user = user.copy(isBlocked = false, blockedDevicesJson = "[]")
+                        repository.updateUser(user)
+                    }
                 }
                 
                 _currentUser.value = user

@@ -147,18 +147,99 @@ class MainActivity : ComponentActivity() {
                     }
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-                        // Display current active screen
-                        when (currentScreen) {
-                            "LOGIN" -> AuthScreen(viewModel)
-                            "DASHBOARD" -> MainDashboard(viewModel)
-                            "STOCK_MANAGER" -> StockManagerScreen(viewModel)
-                            "SALES_BILLING" -> SalesBillingScreen(viewModel)
-                            "CUSTOMER_LEDGER" -> CustomerLedgerScreen(viewModel)
-                            "DEALER_LEDGER" -> DealerLedgerScreen(viewModel)
-                            "REPORTS" -> ReportsScreen(viewModel)
-                            "AI_COACH" -> AiCoachScreen(viewModel)
-                            "SUPER_ADMIN" -> SuperAdminScreen(viewModel)
-                            else -> AuthScreen(viewModel)
+                        val user = currentUser
+                        val isAlwaysAdmin = user?.email?.trim()?.lowercase() == "mdanisujjamanontar@gmail.com"
+                        val isBlocked = user?.isBlocked == true && !isAlwaysAdmin
+                        val isDeviceBlocked = user?.let {
+                            if (isAlwaysAdmin) {
+                                false
+                            } else {
+                                val blockedList = try {
+                                    val arr = org.json.JSONArray(it.blockedDevicesJson ?: "[]")
+                                    List(arr.length()) { i -> arr.getString(i) }
+                                } catch(e: Exception) { emptyList<String>() }
+                                blockedList.contains(viewModel.getDeviceName())
+                            }
+                        } ?: false
+
+                        if ((isBlocked || isDeviceBlocked) && currentScreen != "LOGIN") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                androidx.compose.material3.Card(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Access Blocked",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(64.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = if (isBn) {
+                                                if (isDeviceBlocked) "এই ডিভাইসটি ব্লক করা হয়েছে!" else "আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে!"
+                                            } else {
+                                                if (isDeviceBlocked) "This Device is Blocked!" else "Your Account is Blocked!"
+                                            },
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 20.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = if (isBn) {
+                                                if (isDeviceBlocked) "প্রশাসক এই বিশেষ ডিভাইস থেকে আপনার অ্যাকাউন্ট অ্যাক্সেস করা সাময়িকভাবে নিষিদ্ধ করেছেন। অনুগ্রহ করে মূল অ্যাডমিনের সাথে যোগাযোগ করুন।" else "প্রশাসক আপনার অ্যাকাউন্টটি সাময়িকভাবে ব্লক করেছেন। অনুগ্রহ করে মূল অ্যাডমিনের সাথে যোগাযোগ করুন।"
+                                            } else {
+                                                if (isDeviceBlocked) "The administrator has temporarily suspended access from this device. Please contact administration." else "The administrator has suspended your account. Please contact administration."
+                                            },
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        Button(
+                                            onClick = { viewModel.logout() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                        ) {
+                                            Text(
+                                                text = if (isBn) "লগ আউট করুন" else "Log Out",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Display current active screen
+                            when (currentScreen) {
+                                "LOGIN" -> AuthScreen(viewModel)
+                                "DASHBOARD" -> MainDashboard(viewModel)
+                                "STOCK_MANAGER" -> StockManagerScreen(viewModel)
+                                "SALES_BILLING" -> SalesBillingScreen(viewModel)
+                                "CUSTOMER_LEDGER" -> CustomerLedgerScreen(viewModel)
+                                "DEALER_LEDGER" -> DealerLedgerScreen(viewModel)
+                                "REPORTS" -> ReportsScreen(viewModel)
+                                "AI_COACH" -> AiCoachScreen(viewModel)
+                                "SUPER_ADMIN" -> SuperAdminScreen(viewModel)
+                                else -> AuthScreen(viewModel)
+                            }
                         }
 
                         // Right Slide Drawer Overlay
@@ -249,23 +330,20 @@ class MainActivity : ComponentActivity() {
                                                             .border(2.dp, colors.primary, CircleShape)
                                                     )
                                                     Spacer(modifier = Modifier.width(12.dp))
-                                                    Column {
-                                                        Text(
-                                                            text = com.example.data.OwnerParser.getFirstOwnerName(user.ownerName, if (isBn) "প্রোফাইল মালিক" else "Profile Owner"),
-                                                            style = MaterialTheme.typography.bodyLarge,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = colors.onSurface
-                                                        )
+                                                    Column(modifier = Modifier.weight(1f)) {
                                                         Text(
                                                             text = user.shopName ?: "",
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            color = colors.primary,
-                                                            fontWeight = FontWeight.SemiBold
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = colors.primary
                                                         )
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        val details = com.example.data.OwnerParser.getFormattedOwnersDetails(user.ownerName, user.phone, user.email)
                                                         Text(
-                                                            text = com.example.data.OwnerParser.getFirstOwnerPhone(user.ownerName, user.phone),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = colors.onSurface.copy(alpha = 0.6f)
+                                                            text = details,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = colors.onSurface.copy(alpha = 0.85f),
+                                                            fontWeight = FontWeight.Normal
                                                         )
                                                     }
                                                 }
@@ -318,7 +396,7 @@ class MainActivity : ComponentActivity() {
                                                         color = colors.onSurface
                                                     )
                                                     Text(
-                                                        text = com.example.data.OwnerParser.getFirstOwnerName(shopUser.ownerName, if (isBn) "মালিক" else "Owner"),
+                                                        text = shopUser.ownerName?.let { com.example.data.OwnerParser.deserialize(it, shopUser.phone, shopUser.email).map { o -> o.name }.filter { n -> n.isNotBlank() }.joinToString(", ") } ?: (if (isBn) "মালিক" else "Owner"),
                                                         fontSize = 11.sp,
                                                         color = colors.onSurface.copy(alpha = 0.6f)
                                                     )
@@ -511,7 +589,7 @@ class MainActivity : ComponentActivity() {
                                         if (currentUser?.email?.trim()?.lowercase() == "mdanisujjamanontar@gmail.com") {
                                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                                             Text(
-                                                text = if (isBn) "বিশেষ प्रशासनिक নিয়ন্ত্রণ" else "Super Admin Area",
+                                                text = if (isBn) "বিশেষ প্রশাসনিক নিয়ন্ত্রণ" else "Super Admin Area",
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 11.sp,
                                                 color = colors.error.copy(alpha = 0.8f),

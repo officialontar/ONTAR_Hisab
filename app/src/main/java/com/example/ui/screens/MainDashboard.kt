@@ -957,7 +957,8 @@ fun MainDashboard(viewModel: AppViewModel) {
 
                         Column {
                             val shopTitle = user?.shopName ?: Translator.get("app_title", isBn)
-                            val ownerTitle = com.example.data.OwnerParser.getFirstOwnerName(user?.ownerName, if (isBn) "দোকানের মালিক" else "Shop Owner")
+                            val parsedOwners = com.example.data.OwnerParser.deserialize(user?.ownerName, user?.phone ?: "", user?.email ?: "")
+                            val ownerTitle = parsedOwners.map { it.name }.filter { it.isNotBlank() }.joinToString(" + ").ifBlank { if (isBn) "দোকানের মালিক" else "Shop Owner" }
                             Text(
                                 text = ownerTitle,
                                 style = MaterialTheme.typography.titleSmall,

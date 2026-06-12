@@ -12,7 +12,13 @@ data class User(
     val passwordHash: String,
     val profilePicture: String? = null,
     val ownerName: String? = null,
-    val shopPicture: String? = null
+    val shopPicture: String? = null,
+    val ipAddress: String? = null,
+    val registerLocation: String? = null,
+    val registerDevice: String? = null,
+    val activeDevicesJson: String? = null,
+    val blockedDevicesJson: String? = null,
+    val isBlocked: Boolean = false
 ) : Serializable
 
 @Entity(tableName = "stock_items")
@@ -113,6 +119,28 @@ object OwnerParser {
     fun getFirstOwnerPhone(ownerNameStr: String?, defaultPhone: String = ""): String {
         val list = deserialize(ownerNameStr, defaultPhone)
         return list.firstOrNull()?.phone?.ifBlank { defaultPhone } ?: defaultPhone
+    }
+
+    fun getFormattedOwnersDetails(ownerNameStr: String?, defaultPhone: String = "", defaultEmail: String = ""): String {
+        val list = deserialize(ownerNameStr, defaultPhone, defaultEmail)
+        val sb = StringBuilder()
+        list.forEachIndexed { index, owner ->
+            if (index > 0) {
+                sb.append("\n\n")
+            }
+            if (owner.name.isNotBlank()) {
+                sb.append(owner.name)
+            }
+            if (owner.phone.isNotBlank()) {
+                if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append("\n")
+                sb.append(owner.phone)
+            }
+            if (owner.email.isNotBlank()) {
+                if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append("\n")
+                sb.append(owner.email)
+            }
+        }
+        return sb.toString()
     }
 }
 
