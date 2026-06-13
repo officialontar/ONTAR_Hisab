@@ -478,53 +478,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             }
             } // end of stats banner item
 
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                        .border(1.dp, colors.error.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
-                    colors = CardDefaults.cardColors(containerColor = colors.errorContainer.copy(alpha = 0.15f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (isBn) "⚠️ সম্পূর্ণ ক্লাউড ইউজার ও ডাটা রিসেট" else "⚠️ Factory Server & Registry Reset",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = colors.error,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (isBn) 
-                                "এটি ব্যবহার করে পূর্বে তৈরি করা সকল ডেমো ও পরীক্ষামূলক গ্রাহকদের তথ্য এবং ক্লাউড ডাটাবেজ সম্পূর্ণ ডিলিট করা সম্ভব। শুধু আপনার মূল অ্যাডমিন অ্যাকাউন্ট অপরিবর্তিত থাকবে।" 
-                            else 
-                                "This will permanently wipe all previously registered test shops/users and their records from the servers.",
-                            fontSize = 11.sp,
-                            color = colors.onSurface.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = { showFactoryResetConfirmDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.error),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isBn) "সকল ইউজার মুছুন (ফ্রেশ ক্লিন ডাটা)" else "Wipe All Registered Users",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
+
 
             if (feedbackMessage != null) {
                 item {
@@ -541,7 +495,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                 }
             }
 
-            if (isLoading) {
+            if (isLoading && userList.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -576,6 +530,14 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                     }
                 }
             } else {
+                if (isLoading) {
+                    item {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(4.dp),
+                            color = colors.primary
+                        )
+                    }
+                }
                 item {
                     Text(
                         text = if (isBn) "নিবন্ধিত দোকান ও মালিকদের তালিকা:" else "Registered Shops and Owners Link List:",
@@ -1034,7 +996,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                                 viewModel.showToast(if (isBn) "নিজের বা প্রিমিয়াম অ্যাডমিন অ্যাকাউন্ট ব্লক করা সম্ভব নয়!" else "Cannot block premium Admin account!")
                                             } else {
                                                 isLoading = true
-                                                val updatedUser = user.copy(isBlocked = !user.isBlocked)
+                                                val updatedUser = user.copy(isBlocked = !user.isBlocked).also { o -> userList = userList.map { if (it.email.trim().lowercase() == user.email.trim().lowercase()) o else it } }
                                                 viewModel.adminUpdateUserProfileAndSync(updatedUser) { success, msg ->
                                                     isLoading = false
                                                     feedbackMessage = msg
@@ -1231,6 +1193,21 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
 
     // 2. Edit Profile Dialog
     if (showEditDialog && userToEdit != null) {
+        var profileLoadFailed by remember(editProfilePic) { mutableStateOf(false) }
+        var shopLoadFailed by remember(editShopPic) { mutableStateOf(false) }
+        
+        val finalProfilePic = if (profileLoadFailed || editProfilePic.isBlank()) {
+            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
+        } else {
+            editProfilePic
+        }
+        
+        val finalShopPic = if (shopLoadFailed || editShopPic.isBlank()) {
+            "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"
+        } else {
+            editShopPic
+        }
+
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             title = {
@@ -1266,6 +1243,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                         onValueChange = { editPin = it },
                         label = { Text(if (isBn) "পাসওয়ার্ড পিন" else "Password PIN") }
                     )
+                    
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (isBn) "প্রোফাইল ছবি" else "Profile Picture",
@@ -1279,7 +1257,8 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         AsyncImage(
-                            model = editProfilePic.ifBlank { "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80" },
+                            model = finalProfilePic,
+                            onError = { profileLoadFailed = true },
                             contentDescription = "Profile Picture Preview",
                             modifier = Modifier
                                 .size(64.dp)
@@ -1301,15 +1280,8 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                             Text(text = if (isBn) "গ্যালারি থেকে ছবি নিন" else "Choose from Gallery", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    OutlinedTextField(
-                        value = editProfilePic,
-                        onValueChange = { editProfilePic = it },
-                        label = { Text(if (isBn) "প্রোফাইল ছবি লিংক" else "Profile Picture Link") },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (isBn) "দোকানের ছবি" else "Shop Picture",
                         style = MaterialTheme.typography.bodyMedium,
@@ -1322,7 +1294,8 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         AsyncImage(
-                            model = editShopPic.ifBlank { "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80" },
+                            model = finalShopPic,
+                            onError = { shopLoadFailed = true },
                             contentDescription = "Shop Picture Preview",
                             modifier = Modifier
                                 .size(width = 96.dp, height = 64.dp)
@@ -1344,13 +1317,6 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                             Text(text = if (isBn) "গ্যালারি থেকে দোকান ছবি" else "Choose Shop Gallery", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    OutlinedTextField(
-                        value = editShopPic,
-                        onValueChange = { editShopPic = it },
-                        label = { Text(if (isBn) "দোকানের ছবি লিংক" else "Shop Picture Link") },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             },
             confirmButton = {

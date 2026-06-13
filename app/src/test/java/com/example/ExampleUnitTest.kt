@@ -2,48 +2,93 @@ package com.example
 
 import org.junit.Assert.*
 import org.junit.Test
-import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Response
+import java.util.concurrent.TimeUnit
 
 class ExampleUnitTest {
-  @Test
-  fun addition_isCorrect() {
-    assertEquals(4, 2 + 2)
-  }
+    @Test
+    fun runWipeAllNonAdminData() {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+        val bucketId = "6h9NTtLDbTocxLkyC7Jpv6"
+        val baseUrl = "https://kvdb.io/$bucketId/"
 
-  @Test
-  fun testKvdbKeys() {
-    try {
-      val client = OkHttpClient()
-      val bucketId = "DDCxA8wXRmxjnpLiqbu2Vp"
-      
-      // Attempt to read from the bucket
-      val readRequest = Request.Builder()
-        .url("https://kvdb.io/$bucketId/")
-        .get()
-        .build()
+        println("Fetching list of keys from: $baseUrl")
+        val listRequest = Request.Builder()
+            .url(baseUrl)
+            .get()
+            .build()
         
-      client.newCall(readRequest).execute().use { response ->
-        println("KVDB_GET_STATUS: ${response.code}")
-        println("KVDB_GET_BODY: ${response.body?.string()}")
-      }
-      
-      // Attempt a write
-      val writeBody = "test_value_123".toRequestBody("text/plain".toMediaType())
-      val writeRequest = Request.Builder()
-        .url("https://kvdb.io/$bucketId/test_key")
-        .post(writeBody)
-        .build()
+        var rawKeys = ""
+        client.newCall(listRequest).execute().use { response ->
+            if (response.isSuccessful) {
+                rawKeys = response.body?.string() ?: ""
+            } else {
+                println("Failed to fetch keys. Status code: ${response.code}")
+                return
+            }
+        }
+
+        // Clean and extract keys
+        val cleanRaw = rawKeys.replace("[", "").replace("]", "")
+        val keys = cleanRaw.split(Regex("[\n,\r]"))
+            .map { it.replace("\"", "").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        println("Found total of ${keys.size} keys on the cloud:")
+        for (k in keys) {
+            println("  - $k")
+        }
+
+        val adminKey = "user_mdanisujjamanontar_at_gmail_dot_com"
         
-      client.newCall(writeRequest).execute().use { response ->
-        println("KVDB_POST_STATUS: ${response.code}")
-        println("KVDB_POST_BODY: ${response.body?.string()}")
-      }
-    } catch (e: Exception) {
-      e.printStackTrace()
+        var deletedUsersCount = 0
+        var deletedRedirectsCount = 0
+        var preservedCount = 0
+
+        for (key in keys) {
+            val isUserKey = key.startsWith("user_")
+            val isRedirectKey = key.startsWith("redirect_")
+            
+            // Check if it belongs to main admin
+            val isMainAdmin = key == adminKey || key.contains("mdanisujjamanontar")
+            
+            if (isMainAdmin) {
+                println("PRESERVING ADMIN KEY: $key")
+                preservedCount++
+                continue
+            }
+
+            if (isUserKey || isRedirectKey) {
+                println("DELETING CLOUD KEY: $key")
+                val deleteRequest = Request.Builder()
+                    .url("$baseUrl$key")
+                    .delete()
+                    .build()
+                
+                client.newCall(deleteRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        if (isUserKey) deletedUsersCount++ else deletedRedirectsCount++
+                        println("Successfully deleted: $key")
+                    } else {
+                        println("Failed to delete key: $key (status ${response.code})")
+                    }
+                }
+            } else {
+                println("Skipping unrelated key: $key")
+                preservedCount++
+            }
+        }
+
+        println("=== CLEANUP PROCESS COMPLETED ===")
+        println("Users Deleted: $deletedUsersCount")
+        println("Redirects Deleted: $deletedRedirectsCount")
+        println("Preserved Keys: $preservedCount")
     }
-  }
 }

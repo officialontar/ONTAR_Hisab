@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
 
         val database = AppDatabase.getDatabase(this)
         val repository = AppRepository(database.appDao())
-        val viewModelFactory = AppViewModelFactory(repository)
+        val viewModelFactory = AppViewModelFactory(repository, application)
         val viewModel = ViewModelProvider(this, viewModelFactory)[AppViewModel::class.java]
 
         setContent {

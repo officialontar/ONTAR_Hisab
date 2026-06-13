@@ -20,7 +20,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppViewModel(private val repository: AppRepository) : ViewModel() {
+class AppViewModel(private val repository: AppRepository, private val application: android.app.Application) : ViewModel() {
+
+    private val prefs = application.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+
+    private val _customGeminiApiKeyState = MutableStateFlow(prefs.getString("custom_gemini_api_key", "") ?: "")
+    val customGeminiApiKeyState: StateFlow<String> = _customGeminiApiKeyState.asStateFlow()
+
+    fun updateCustomGeminiApiKey(key: String) {
+        _customGeminiApiKeyState.value = key
+        prefs.edit().putString("custom_gemini_api_key", key).apply()
+    }
+
+    fun getGeminiApiKey(): String {
+        val customKey = _customGeminiApiKeyState.value
+        if (customKey.isNotBlank()) {
+            return customKey
+        }
+        return try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+    }
 
     // Language State: true for Bengali, false for English
     private val _isBengali = MutableStateFlow(true)
@@ -1571,7 +1589,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
     // --- GEMINI AI ASSISTANT & SMS AI Draft ---
     fun askGeminiForBusinessHealth() {
-        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+        val apiKey: String = getGeminiApiKey()
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             _aiReportText.value = if (_isBengali.value) {
                 "দুঃখিত, কোনো এপিআই কী (API Key) পাওয়া যায়নি। দয়া করে গুগল এআই স্টুডিও-র (AI Studio UI) সিক্রেটস ড্যাশবোর্ডে GEMINI_API_KEY সেট করুন।"
@@ -1734,7 +1752,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     val isMsgDrafting: StateFlow<Boolean> = _isMsgDrafting.asStateFlow()
 
     fun generateAiDueMessage(customerName: String, totalDue: Double, address: String? = null) {
-        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+        val apiKey: String = getGeminiApiKey()
         val shopName = _currentUser.value?.shopName ?: "দোকান"
         val shopPhone = _currentUser.value?.phone ?: ""
         val ownerName = _currentUser.value?.ownerName ?: ""
@@ -1852,7 +1870,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun generateAiDealerMessage(dealerName: String, totalOwed: Double, companyName: String? = null) {
-        val apiKey: String = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
+        val apiKey: String = getGeminiApiKey()
         val shopName = _currentUser.value?.shopName ?: "দোকান"
         val shopPhone = _currentUser.value?.phone ?: ""
         val ownerName = _currentUser.value?.ownerName ?: ""
@@ -1974,11 +1992,11 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     }
 }
 
-class AppViewModelFactory(private val repository: AppRepository) : ViewModelProvider.Factory {
+class AppViewModelFactory(private val repository: AppRepository, private val application: android.app.Application) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AppViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AppViewModel(repository) as T
+            return AppViewModel(repository, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
