@@ -218,7 +218,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                 .padding(paddingValues)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Search bar for Filtering Dealers
+                // Search bar for Filtering Dealers - remains pinned/fixed at the top
                 if (dealersList.isNotEmpty()) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -239,95 +239,6 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("dealer_search_bar")
                     )
-
-                    // Dynamic dealer statistics cards
-                    val totalDealersCount = dealersList.size
-                    val phoneDealersCount = dealersList.count { it.phone.trim().isNotEmpty() }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = colors.primaryContainer.copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isBn) "মোট ডিলার ও পাওনাদার" else "Total Dealers/Suppliers",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (isBn) "$totalDealersCount জন" else "$totalDealersCount Person(s)",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.primary
-                                )
-                            }
-                        }
-
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = colors.secondaryContainer.copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Phone,
-                                        contentDescription = null,
-                                        tint = colors.secondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isBn) "মোবাইল নম্বরসহ" else "With Phone Number",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (isBn) "$phoneDealersCount জন" else "$phoneDealersCount Person(s)",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.secondary
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
 
                 if (dealersList.isEmpty()) {
@@ -359,72 +270,163 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                             textAlign = TextAlign.Center
                         )
                     }
-                } else if (filteredDealers.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = colors.onBackground.copy(alpha = 0.3f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = if (isBn) "কোনো ম্যাচিং ডিলার পাওয়া যায়নি!" else "No matching dealers found!",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colors.onBackground.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
                     ) {
+                        // 1. Dynamic dealer statistics cards (Scroll with the list)
                         item {
-                            Spacer(modifier = Modifier.height(4.dp))
+                            val totalDealersCount = dealersList.size
+                            val phoneDealersCount = dealersList.count { it.phone.trim().isNotEmpty() }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colors.primaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = colors.primary,
+                                                modifier = Modifier.size(16.dp)
+                                             )
+                                            Text(
+                                                text = if (isBn) "মোট ডিলার ও পাওনাদার" else "Total Dealers/Suppliers",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = colors.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (isBn) "$totalDealersCount জন" else "$totalDealersCount Person(s)",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colors.secondaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = null,
+                                                tint = colors.secondary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = if (isBn) "মোবাইল নম্বরসহ" else "With Phone Number",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = colors.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (isBn) "$phoneDealersCount জন" else "$phoneDealersCount Person(s)",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.secondary
+                                        )
+                                    }
+                                }
+                            }
                         }
 
-                        items(filteredDealers) { dealer ->
-                            val serialNumber = sortedDealers.indexOfFirst { it.id == dealer.id } + 1
-                            DealerRecordCard(
-                                dealer = dealer,
-                                serialNumber = serialNumber,
-                                isBn = isBn,
-                                colors = colors,
-                                onPayoutClick = {
-                                    selectedDealerForPayout = dealer
-                                    payoutAmountText = ""
-                                },
-                                onPurchaseClick = {
-                                    selectedDealerForPurchase = dealer
-                                    purchaseAmountText = ""
-                                    purchaseNotesText = ""
-                                },
-                                onHistoryClick = {
-                                    selectedDealerForHistory = dealer
-                                },
-                                onRemindClick = {
-                                    activeDealerForSmsDraft = dealer
-                                    viewModel.generateAiDealerMessage(dealer.name, dealer.totalOwed, dealer.company)
-                                },
-                                onEditClick = {
-                                    dealerToEdit = dealer
-                                    editDealerName = dealer.name
-                                    editDealerPhone = dealer.phone
-                                    editCompanyName = dealer.company ?: ""
-                                    editDealerPhotoUri = dealer.photoUri ?: ""
-                                },
-                                onDeleteClick = {
-                                    dealerToDelete = dealer
+                        // 2. Empty Matching State Block inside LazyColumn
+                        if (filteredDealers.isEmpty()) {
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = colors.onBackground.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = if (isBn) "কোনো ম্যাচিং ডিলার পাওয়া যায়নি!" else "No matching dealers found!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colors.onBackground.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
-                            )
+                            }
+                        } else {
+                            items(filteredDealers) { dealer ->
+                                val serialNumber = sortedDealers.indexOfFirst { it.id == dealer.id } + 1
+                                DealerRecordCard(
+                                    dealer = dealer,
+                                    serialNumber = serialNumber,
+                                    isBn = isBn,
+                                    colors = colors,
+                                    onPayoutClick = {
+                                        selectedDealerForPayout = dealer
+                                        payoutAmountText = ""
+                                    },
+                                    onPurchaseClick = {
+                                        selectedDealerForPurchase = dealer
+                                        purchaseAmountText = ""
+                                        purchaseNotesText = ""
+                                    },
+                                    onHistoryClick = {
+                                        selectedDealerForHistory = dealer
+                                    },
+                                    onRemindClick = {
+                                        activeDealerForSmsDraft = dealer
+                                        viewModel.generateAiDealerMessage(dealer.name, dealer.totalOwed, dealer.company)
+                                    },
+                                    onEditClick = {
+                                        dealerToEdit = dealer
+                                        editDealerName = dealer.name
+                                        editDealerPhone = dealer.phone
+                                        editCompanyName = dealer.company ?: ""
+                                        editDealerPhotoUri = dealer.photoUri ?: ""
+                                    },
+                                    onDeleteClick = {
+                                        dealerToDelete = dealer
+                                    }
+                                )
+                            }
                         }
 
                         item {

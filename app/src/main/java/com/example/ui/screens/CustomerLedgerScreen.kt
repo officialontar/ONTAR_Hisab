@@ -254,7 +254,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                 .padding(paddingValues)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Search bar for Filtering Customers
+                // Search bar for Filtering Customers - remains pinned/fixed at the top
                 if (customersList.isNotEmpty()) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -275,95 +275,6 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("customer_search_bar")
                     )
-
-                    // Dynamic customer statistics cards
-                    val totalCustomersCount = customersList.size
-                    val phoneCustomersCount = customersList.count { it.phone.trim().isNotEmpty() }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = colors.primaryContainer.copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isBn) "মোট কাস্টমার" else "Total Customers",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (isBn) "$totalCustomersCount জন" else "$totalCustomersCount Person(s)",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.primary
-                                )
-                            }
-                        }
-
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = colors.secondaryContainer.copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Phone,
-                                        contentDescription = null,
-                                        tint = colors.secondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isBn) "মোবাইল নম্বরসহ" else "With Phone Number",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (isBn) "$phoneCustomersCount জন" else "$phoneCustomersCount Person(s)",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.secondary
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
 
                 if (customersList.isEmpty()) {
@@ -395,41 +306,144 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                             textAlign = TextAlign.Center
                         )
                     }
-                } else if (filteredCustomers.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = colors.onBackground.copy(alpha = 0.3f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = if (isBn) "কোনো ম্যাচিং কাস্টমার পাওয়া যায়নি!" else "No matching customers found!",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colors.onBackground.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
                     ) {
+                        // 1. Dynamic customer statistics cards (Scroll with the list)
                         item {
-                            Spacer(modifier = Modifier.height(4.dp))
+                            val totalCustomersCount = customersList.size
+                            val phoneCustomersCount = customersList.count { it.phone.trim().isNotEmpty() }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colors.primaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = colors.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = if (isBn) "মোট কাস্টমার" else "Total Customers",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = colors.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (isBn) "$totalCustomersCount জন" else "$totalCustomersCount Person(s)",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = colors.secondaryContainer.copy(alpha = 0.4f)
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = null,
+                                                tint = colors.secondary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = if (isBn) "মোবাইল নম্বরসহ" else "With Phone Number",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = colors.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (isBn) "$phoneCustomersCount জন" else "$phoneCustomersCount Person(s)",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.secondary
+                                        )
+                                    }
+                                }
+                            }
                         }
 
+                        // 2. Export to Excel Button (Scroll with the list; padding instead of fixed height so text wraps beautifully)
                         item {
-                            val eligibleCustomers = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
-                            if (eligibleCustomers.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        saveCsvToDownloads(context, isBn, customersList)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF107C41), // Microsoft Excel brand green
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_export_excel"),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Excel Icon",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isBn) "সকল কাস্টমারের তালিকা এক্সেল শিট আকারে ডাউনলোড করুন" else "Download customer list to Excel Sheet",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 18.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        // 3. Smart AI Bulk Message Banner (Scroll with the list)
+                        val eligibleCustomers = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
+                        if (eligibleCustomers.isNotEmpty()) {
+                            item {
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -505,40 +519,66 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                             }
                         }
 
-                        items(filteredCustomers) { customer ->
-                            val serialNumber = sortedCustomers.indexOfFirst { it.id == customer.id } + 1
-                            CustomerRecordCard(
-                                customer = customer,
-                                serialNumber = serialNumber,
-                                isBn = isBn,
-                                colors = colors,
-                                onHistoryClick = {
-                                    selectedCustomerForHistory = customer
-                                },
-                                onDepositClick = {
-                                    selectedCustomerForDeposit = customer
-                                    depositAmountText = ""
-                                },
-                                onNewDueClick = {
-                                    selectedCustomerForNewDue = customer
-                                    newDueAmountText = ""
-                                    customDueReasonText = ""
-                                },
-                                onRemindClick = {
-                                    activeCustomerForSmsDraft = customer
-                                    viewModel.generateAiDueMessage(customer.name, customer.totalDue, customer.address)
-                                },
-                                onEditClick = {
-                                    customerToEdit = customer
-                                    editCustomerName = customer.name
-                                    editCustomerPhone = customer.phone
-                                    editCustomerAddress = customer.address ?: ""
-                                    editCustomerPhotoUri = customer.photoUri ?: ""
-                                },
-                                onDeleteClick = {
-                                    customerToDelete = customer
+                        if (filteredCustomers.isEmpty()) {
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = colors.onBackground.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = if (isBn) "কোনো ম্যাচিং কাস্টমার পাওয়া যায়নি!" else "No matching customers found!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colors.onBackground.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
-                            )
+                            }
+                        } else {
+                            items(filteredCustomers) { customer ->
+                                val serialNumber = sortedCustomers.indexOfFirst { it.id == customer.id } + 1
+                                CustomerRecordCard(
+                                    customer = customer,
+                                    serialNumber = serialNumber,
+                                    isBn = isBn,
+                                    colors = colors,
+                                    onHistoryClick = {
+                                        selectedCustomerForHistory = customer
+                                    },
+                                    onDepositClick = {
+                                        selectedCustomerForDeposit = customer
+                                        depositAmountText = ""
+                                    },
+                                    onNewDueClick = {
+                                        selectedCustomerForNewDue = customer
+                                        newDueAmountText = ""
+                                        customDueReasonText = ""
+                                    },
+                                    onRemindClick = {
+                                        activeCustomerForSmsDraft = customer
+                                        viewModel.generateAiDueMessage(customer.name, customer.totalDue, customer.address)
+                                    },
+                                    onEditClick = {
+                                        customerToEdit = customer
+                                        editCustomerName = customer.name
+                                        editCustomerPhone = customer.phone
+                                        editCustomerAddress = customer.address ?: ""
+                                        editCustomerPhotoUri = customer.photoUri ?: ""
+                                    },
+                                    onDeleteClick = {
+                                        customerToDelete = customer
+                                    }
+                                )
+                            }
                         }
 
                         item {
@@ -1896,6 +1936,123 @@ As today's date is $todayStr, we kindly and warmly remind you to clear this due 
 With appreciation -
 $signatureBlock
             """.trimIndent()
+        }
+    }
+}
+
+fun saveCsvToDownloads(context: Context, isBn: Boolean, customers: List<Customer>) {
+    try {
+        val fileName = if (isBn) "বাকি_কাস্টমার_তালিকা.csv" else "Customer_Ledger_List.csv"
+        val csvBuilder = java.lang.StringBuilder()
+        
+        // Add UTF-8 BOM so Excel opens it with Bengali characters correctly
+        csvBuilder.append('\uFEFF')
+        
+        val headers = if (isBn) {
+            listOf("সিরিয়াল নম্বর", "কাস্টমারের নাম", "ঠিকানা", "মোবাইল নাম্বার", "বাকি পরিমাণ (টাকা)")
+        } else {
+            listOf("Serial Number", "Customer Name", "Address", "Mobile Number", "Total Due (BDT)")
+        }
+        
+        csvBuilder.append(headers.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+        csvBuilder.append("\n")
+        
+        val sortedList = customers.sortedBy { it.id }
+        sortedList.forEachIndexed { index, customer ->
+            val sn = (index + 1).toString()
+            val name = customer.name
+            val addr = customer.address ?: ""
+            val phone = customer.phone
+            val due = customer.totalDue.toString()
+            
+            val row = listOf(sn, name, addr, phone, due)
+            csvBuilder.append(row.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+            csvBuilder.append("\n")
+        }
+        
+        val csvContent = csvBuilder.toString()
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(csvContent.toByteArray(Charsets.UTF_8))
+                }
+                val successMsg = if (isBn) {
+                    "কাস্টমারদের তালিকা সফলভাবে 'Downloads' ফোল্ডারে সেভ হয়েছে!"
+                } else {
+                    "Customer list successfully saved in 'Downloads' folder!"
+                }
+                android.widget.Toast.makeText(context, successMsg, android.widget.Toast.LENGTH_LONG).show()
+                
+                // Share intent fallback so they can directly open/share as well
+                try {
+                    val viewIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(viewIntent, if (isBn) "কাস্টমার তালিকা শেয়ার করুন" else "Share Customer List"))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            } else {
+                throw java.io.IOException("Failed to create MediaStore entry")
+            }
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = java.io.File(downloadsDir, fileName)
+            file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
+            val successMsg = if (isBn) {
+                "কাস্টমারদের তালিকা সফলভাবে 'Downloads' ফোল্ডারে সেভ হয়েছে!"
+            } else {
+                "Customer list successfully saved in 'Downloads' folder!"
+            }
+            android.widget.Toast.makeText(context, successMsg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        try {
+            val cacheFile = java.io.File(context.cacheDir, if (isBn) "বাকি_কাস্টমার_তালিকা.csv" else "Customer_Ledger_List.csv")
+            val csvContentInner = java.lang.StringBuilder().apply {
+                append('\uFEFF')
+                val headers = if (isBn) {
+                    listOf("সিরিয়াল নম্বর", "কাস্টমারের নাম", "ঠিকানা", "মোবাইল নাম্বার", "বাকি পরিমাণ (টাকা)")
+                } else {
+                    listOf("Serial Number", "Customer Name", "Address", "Mobile Number", "Total Due (BDT)")
+                }
+                append(headers.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+                append("\n")
+                customers.sortedBy { it.id }.forEachIndexed { index, customer ->
+                    val row = listOf(
+                        (index + 1).toString(),
+                        customer.name,
+                        customer.address ?: "",
+                        customer.phone,
+                        customer.totalDue.toString()
+                    )
+                    append(row.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+                    append("\n")
+                }
+            }.toString()
+            
+            cacheFile.writeBytes(csvContentInner.toByteArray(Charsets.UTF_8))
+            val shareUri = androidx.core.content.FileProvider.getUriForFile(context, "com.example.provider", cacheFile)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, shareUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, if (isBn) "কাস্টমার তালিকা শেয়ার করুন" else "Share Customer List"))
+        } catch (ex: Exception) {
+            val errMsg = if (isBn) "সেভ বা শেয়ার করতে সমস্যা হয়েছে!" else "Failed to save or share list!"
+            android.widget.Toast.makeText(context, errMsg, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 }

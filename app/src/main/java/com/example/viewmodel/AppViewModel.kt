@@ -42,34 +42,55 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
 
     fun uriToBase64(context: android.content.Context, uri: android.net.Uri): String? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            if (originalBitmap == null) return null
-
-            // Resize the bitmap to max size of 200 pixels for a clean and fast sync of previews
-            val maxSize = 200
-            val width = originalBitmap.width
-            val height = originalBitmap.height
-            val scaledBitmap = if (width > maxSize || height > maxSize) {
-                val ratio = width.toFloat() / height.toFloat()
-                val (newWidth, newHeight) = if (ratio > 1f) {
-                    maxSize to (maxSize / ratio).toInt()
-                } else {
-                    (maxSize * ratio).toInt() to maxSize
-                }
-                android.graphics.Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
-            } else {
-                originalBitmap
+            val contentResolver = context.contentResolver
+            
+            // First, decode with inJustDecodeBounds=true to check dimensions to avoid OOM
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
             }
-
+            contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
+            }
+            
+            val reqWidth = 180
+            val reqHeight = 180
+            var inSampleSize = 1
+            if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
+                val halfHeight = options.outHeight / 2
+                val halfWidth = options.outWidth / 2
+                while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                    inSampleSize *= 2
+                }
+            }
+            
+            // Decode bitmap with calculated inSampleSize
+            val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = inSampleSize
+            }
+            val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
+            
+            // Scale to final exact size if needed
+            val scaledBitmap = if (bitmap.width > 200 || bitmap.height > 200) {
+                val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                val (newWidth, newHeight) = if (ratio > 1f) {
+                    200 to (200 / ratio).toInt()
+                } else {
+                    (200 * ratio).toInt() to 200
+                }
+                android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+            } else {
+                bitmap
+            }
+            
             val outputStream = java.io.ByteArrayOutputStream()
-            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, outputStream)
             val imageBytes = outputStream.toByteArray()
             val base64String = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
             "data:image/jpeg;base64,$base64String"
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             null
         }
     }
@@ -1496,6 +1517,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     fun deleteCustomer(customer: Customer) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteCustomer(customer)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "কাস্টমার রিমুভ করা হয়েছে" else "Customer removed successfully")
             }
@@ -1512,6 +1534,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 photoUri = photoUri
             )
             repository.updateCustomer(updated)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "কাস্টমার প্রোফাইল আপডেট করা হয়েছে!" else "Customer profile updated successfully!")
             }
