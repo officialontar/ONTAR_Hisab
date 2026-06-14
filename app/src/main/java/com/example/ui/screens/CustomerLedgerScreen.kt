@@ -42,6 +42,9 @@ import android.net.Uri
 fun CustomerLedgerScreen(viewModel: AppViewModel) {
     val isBn by viewModel.isBengali.collectAsState()
     val customersList by viewModel.customers.collectAsState()
+    val sortedCustomers = remember(customersList) {
+        customersList.sortedBy { it.id }
+    }
     val currentUser by viewModel.currentUser.collectAsState()
     val colors = MaterialTheme.colorScheme
 
@@ -115,7 +118,9 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            customerPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                customerPhotoUri = base64
+            }
         }
     }
 
@@ -123,7 +128,9 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            editCustomerPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editCustomerPhotoUri = base64
+            }
         }
     }
 
@@ -499,8 +506,10 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                         }
 
                         items(filteredCustomers) { customer ->
+                            val serialNumber = sortedCustomers.indexOfFirst { it.id == customer.id } + 1
                             CustomerRecordCard(
                                 customer = customer,
+                                serialNumber = serialNumber,
                                 isBn = isBn,
                                 colors = colors,
                                 onHistoryClick = {
@@ -1894,6 +1903,7 @@ $signatureBlock
 @Composable
 fun CustomerRecordCard(
     customer: Customer,
+    serialNumber: Int,
     isBn: Boolean,
     colors: ColorScheme,
     onHistoryClick: () -> Unit,
@@ -1917,30 +1927,45 @@ fun CustomerRecordCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    if (!customer.photoUri.isNullOrEmpty()) {
-                        coil.compose.AsyncImage(
-                            model = customer.photoUri,
-                            contentDescription = "Customer Photo",
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1.8f)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = serialNumber.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = colors.primary.copy(alpha = 0.8f)
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(colors.primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = customer.name.firstOrNull()?.toString()?.uppercase() ?: "K",
-                                color = colors.primary,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp
+                        Spacer(modifier = Modifier.height(2.dp))
+                        if (!customer.photoUri.isNullOrEmpty()) {
+                            coil.compose.AsyncImage(
+                                model = customer.photoUri,
+                                contentDescription = "Customer Photo",
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.primary.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = customer.name.firstOrNull()?.toString()?.uppercase() ?: "K",
+                                    color = colors.primary,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 18.sp
+                                )
+                            }
                         }
                     }
 
@@ -1961,8 +1986,11 @@ fun CustomerRecordCard(
                     }
                 }
 
-                // Balance due
-                Column(horizontalAlignment = Alignment.End) {
+                // Balance due column
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.weight(1.1f)
+                ) {
                     val isDeposit = customer.totalDue < 0
                     Text(
                         text = if (isDeposit) {

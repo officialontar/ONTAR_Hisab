@@ -80,16 +80,26 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var showManageDevicesDialog by remember { mutableStateOf(false) }
     var userForDeviceManagement by remember { mutableStateOf<User?>(null) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val adminProfilePicLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { editProfilePic = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                editProfilePic = base64
+            }
+        }
     }
 
     val adminShopPicLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { editShopPic = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                editShopPic = base64
+            }
+        }
     }
 
     fun refreshData() {

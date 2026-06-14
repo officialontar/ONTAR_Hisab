@@ -75,11 +75,15 @@ fun StockManagerScreen(viewModel: AppViewModel) {
         }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val stockPhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            stockPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                stockPhotoUri = base64
+            }
         }
     }
 
@@ -87,7 +91,9 @@ fun StockManagerScreen(viewModel: AppViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            editItemPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editItemPhotoUri = base64
+            }
         }
     }
 

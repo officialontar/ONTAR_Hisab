@@ -36,6 +36,9 @@ import android.content.Intent
 fun DealerLedgerScreen(viewModel: AppViewModel) {
     val isBn by viewModel.isBengali.collectAsState()
     val dealersList by viewModel.dealers.collectAsState()
+    val sortedDealers = remember(dealersList) {
+        dealersList.sortedBy { it.id }
+    }
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -82,7 +85,9 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            dealerPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                dealerPhotoUri = base64
+            }
         }
     }
 
@@ -90,7 +95,9 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            editDealerPhotoUri = uri.toString()
+            viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editDealerPhotoUri = base64
+            }
         }
     }
 
@@ -385,8 +392,10 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                         }
 
                         items(filteredDealers) { dealer ->
+                            val serialNumber = sortedDealers.indexOfFirst { it.id == dealer.id } + 1
                             DealerRecordCard(
                                 dealer = dealer,
+                                serialNumber = serialNumber,
                                 isBn = isBn,
                                 colors = colors,
                                 onPayoutClick = {
@@ -1220,6 +1229,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
 @Composable
 fun DealerRecordCard(
     dealer: Dealer,
+    serialNumber: Int,
     isBn: Boolean,
     colors: ColorScheme,
     onPayoutClick: () -> Unit,
@@ -1244,27 +1254,39 @@ fun DealerRecordCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.8f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!dealer.photoUri.isNullOrEmpty()) {
-                        coil.compose.AsyncImage(
-                            model = dealer.photoUri,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = serialNumber.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = colors.primary.copy(alpha = 0.8f)
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(colors.secondary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.ShoppingCart, null, tint = colors.secondary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
+                        if (!dealer.photoUri.isNullOrEmpty()) {
+                            coil.compose.AsyncImage(
+                                model = dealer.photoUri,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.secondary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.ShoppingCart, null, tint = colors.secondary, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
 
@@ -1290,7 +1312,10 @@ fun DealerRecordCard(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 // Balance owed
-                Column(horizontalAlignment = Alignment.End) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.weight(1.1f)
+                ) {
                     val isAdvance = dealer.totalOwed < 0
                     Text(
                         text = if (isAdvance) {

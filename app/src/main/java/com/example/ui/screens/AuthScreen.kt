@@ -70,17 +70,26 @@ fun AuthScreen(viewModel: AppViewModel) {
     var jointPhone3 by remember { mutableStateOf("") }
     var jointEmail3 by remember { mutableStateOf("") }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val shopLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { shopPicture = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                shopPicture = base64
+            }
+        }
     }
 
     val ownerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { ownerPicture = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                ownerPicture = base64
+            }
+        }
     }
 
     // Reset Flow inputs

@@ -90,13 +90,21 @@ class MainActivity : ComponentActivity() {
                 val newShopPicLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.GetContent()
                 ) { uri ->
-                    uri?.let { newShopPicPreset = it.toString() }
+                    uri?.let { 
+                        viewModel.uriToBase64(context, it)?.let { base64 ->
+                            newShopPicPreset = base64
+                        }
+                    }
                 }
 
                 val newOwnerPicLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.GetContent()
                 ) { uri ->
-                    uri?.let { newOwnerPicPreset = it.toString() }
+                    uri?.let { 
+                        viewModel.uriToBase64(context, it)?.let { base64 ->
+                            newOwnerPicPreset = base64
+                        }
+                    }
                 }
 
                 val colors = MaterialTheme.colorScheme
@@ -520,8 +528,8 @@ class MainActivity : ComponentActivity() {
                                                     type = "text/plain"
                                                     putExtra(
                                                         Intent.EXTRA_TEXT,
-                                                        if (isBn) "অন্তর হিসাব অ্যাপটি ব্যবহার করে আপনার দোকানের হিসাব রাখুন সহজেই! ডাউনলোড লিঙ্ক: http://example.com/antarhisab_refer"
-                                                        else "Keep track of your shop books easily with ONTAR Hisab App! Download link: http://example.com/antarhisab_refer"
+                                                        if (isBn) "অন্তর হিসাব অ্যাপটি ব্যবহার করে আপনার দোকানের হিসাব রাখুন সহজেই! ডাউনলোড লিঙ্ক: https://github.com/officialontar/ONTAR_Hisab/releases"
+                                                        else "Keep track of your shop books easily with ONTAR Hisab App! Download link: https://github.com/officialontar/ONTAR_Hisab/releases"
                                                     )
                                                 }
                                                 context.startActivity(Intent.createChooser(intent, "Share invite via"))

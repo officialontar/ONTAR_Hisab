@@ -40,6 +40,40 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         return try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" } ?: ""
     }
 
+    fun uriToBase64(context: android.content.Context, uri: android.net.Uri): String? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
+            if (originalBitmap == null) return null
+
+            // Resize the bitmap to max size of 200 pixels for a clean and fast sync of previews
+            val maxSize = 200
+            val width = originalBitmap.width
+            val height = originalBitmap.height
+            val scaledBitmap = if (width > maxSize || height > maxSize) {
+                val ratio = width.toFloat() / height.toFloat()
+                val (newWidth, newHeight) = if (ratio > 1f) {
+                    maxSize to (maxSize / ratio).toInt()
+                } else {
+                    (maxSize * ratio).toInt() to maxSize
+                }
+                android.graphics.Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
+            } else {
+                originalBitmap
+            }
+
+            val outputStream = java.io.ByteArrayOutputStream()
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            val imageBytes = outputStream.toByteArray()
+            val base64String = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
+            "data:image/jpeg;base64,$base64String"
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     // Language State: true for Bengali, false for English
     private val _isBengali = MutableStateFlow(true)
     val isBengali: StateFlow<Boolean> = _isBengali.asStateFlow()
