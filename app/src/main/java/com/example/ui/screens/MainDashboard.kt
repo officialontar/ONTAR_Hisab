@@ -87,19 +87,77 @@ fun MainDashboard(viewModel: AppViewModel) {
     var editJointEmail3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.email ?: "") }
 
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     val editShopLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { editShopPicture = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                editShopPicture = base64
+            }
+        }
     }
 
     val editOwnerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { editOwnerPicture = it.toString() }
+        uri?.let { 
+            viewModel.uriToBase64(context, it)?.let { base64 ->
+                editOwnerPicture = base64
+            }
+        }
+    }
+
+    val editShopCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                editShopPicture = base64
+            }
+        }
+    }
+
+    val editOwnerCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                editOwnerPicture = base64
+            }
+        }
     }
 
     // Financial Metrics Flows
+    LaunchedEffect(showProfileSettingsDialog, user) {
+        if (showProfileSettingsDialog && user != null) {
+            editShopName = user?.getLocalizedShopName(isBn) ?: ""
+            editOwnerName = user?.getLocalizedOwnerName(isBn) ?: ""
+            editPhone = user?.phone ?: ""
+            editEmail = user?.email ?: ""
+            editPin = user?.passwordHash ?: ""
+            editShopPicture = user?.shopPicture ?: ""
+            editOwnerPicture = user?.profilePicture ?: ""
+            
+            val currentOwners = com.example.data.OwnerParser.deserialize(user?.getLocalizedOwnerName(isBn), user?.phone ?: "", user?.email ?: "")
+            editOwnershipType = if (user?.ownerName?.trim()?.startsWith("[") == true) "joint" else "single"
+            editJointCount = if (currentOwners.size >= 3) 3 else 2
+            
+            editJointName1 = currentOwners.getOrNull(0)?.name ?: ""
+            editJointPhone1 = currentOwners.getOrNull(0)?.phone ?: ""
+            editJointEmail1 = currentOwners.getOrNull(0)?.email ?: ""
+            
+            editJointName2 = currentOwners.getOrNull(1)?.name ?: ""
+            editJointPhone2 = currentOwners.getOrNull(1)?.phone ?: ""
+            editJointEmail2 = currentOwners.getOrNull(1)?.email ?: ""
+            
+            editJointName3 = currentOwners.getOrNull(2)?.name ?: ""
+            editJointPhone3 = currentOwners.getOrNull(2)?.phone ?: ""
+            editJointEmail3 = currentOwners.getOrNull(2)?.email ?: ""
+        }
+    }
+
     val itemsFlow by viewModel.stockItems.collectAsState()
     val customersFlow by viewModel.customers.collectAsState()
     val dealersFlow by viewModel.dealers.collectAsState()
@@ -245,7 +303,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.height(4.dp))
                             if (!editOwnerPicture.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = editOwnerPicture,
+                                    model = rememberImageModel(editOwnerPicture),
                                     contentDescription = null,
                                     modifier = Modifier
                                         .size(60.dp)
@@ -280,7 +338,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.height(4.dp))
                             if (!editShopPicture.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = editShopPicture,
+                                    model = rememberImageModel(editShopPicture),
                                     contentDescription = null,
                                     modifier = Modifier
                                         .size(60.dp)
@@ -675,14 +733,51 @@ fun MainDashboard(viewModel: AppViewModel) {
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = { editShopLauncher.launch("image/*") },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Main Gallery Image", fontSize = 11.sp)
+                                OutlinedButton(
+                                    onClick = { editShopLauncher.launch("image/*") },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = if (isBn) "গ্যালারি ছবি" else "Gallery Picture", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { editShopCameraLauncher.launch(null) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(15.dp, 10.dp)
+                                                .border(1.2.dp, colors.primary, RoundedCornerShape(1.5.dp))
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.5.dp)
+                                                .border(1.2.dp, colors.primary, CircleShape)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(4.dp, 1.2.dp)
+                                                .align(Alignment.TopCenter)
+                                                .background(colors.primary, RoundedCornerShape(topStart = 0.5.dp, topEnd = 0.5.dp))
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = if (isBn) "ক্যামেরা ছবি" else "Camera Picture", fontSize = 11.sp)
+                                }
                             }
 
                             val isCustomShop = !listOf(
@@ -703,7 +798,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         .padding(6.dp)
                                 ) {
                                     AsyncImage(
-                                        model = editShopPicture,
+                                        model = rememberImageModel(editShopPicture),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .size(35.dp)
@@ -783,14 +878,51 @@ fun MainDashboard(viewModel: AppViewModel) {
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = { editOwnerLauncher.launch("image/*") },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Owner Profile Picture", fontSize = 11.sp)
+                                OutlinedButton(
+                                    onClick = { editOwnerLauncher.launch("image/*") },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = if (isBn) "গ্যালারি ছবি" else "Gallery Profile", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { editOwnerCameraLauncher.launch(null) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(15.dp, 10.dp)
+                                                .border(1.2.dp, colors.primary, RoundedCornerShape(1.5.dp))
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.5.dp)
+                                                .border(1.2.dp, colors.primary, CircleShape)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(4.dp, 1.2.dp)
+                                                .align(Alignment.TopCenter)
+                                                .background(colors.primary, RoundedCornerShape(topStart = 0.5.dp, topEnd = 0.5.dp))
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = if (isBn) "ক্যামেরা ছবি" else "Camera Profile", fontSize = 11.sp)
+                                }
                             }
 
                             val isCustomOwner = !listOf(
@@ -811,7 +943,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         .padding(6.dp)
                                 ) {
                                     AsyncImage(
-                                        model = editOwnerPicture,
+                                        model = rememberImageModel(editOwnerPicture),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .size(35.dp)
@@ -927,7 +1059,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                         val ownerPic = user?.profilePicture
                         if (!ownerPic.isNullOrBlank()) {
                             AsyncImage(
-                                model = ownerPic,
+                                model = rememberImageModel(ownerPic),
                                 contentDescription = "Profile Pic",
                                 modifier = Modifier
                                     .size(38.dp)
@@ -956,8 +1088,8 @@ fun MainDashboard(viewModel: AppViewModel) {
                         Spacer(modifier = Modifier.width(8.dp))
 
                         Column {
-                            val shopTitle = user?.shopName ?: Translator.get("app_title", isBn)
-                            val parsedOwners = com.example.data.OwnerParser.deserialize(user?.ownerName, user?.phone ?: "", user?.email ?: "")
+                            val shopTitle = user?.getLocalizedShopName(isBn) ?: Translator.get("app_title", isBn)
+                            val parsedOwners = com.example.data.OwnerParser.deserialize(user?.getLocalizedOwnerName(isBn), user?.phone ?: "", user?.email ?: "")
                             val ownerTitle = parsedOwners.map { it.name }.filter { it.isNotBlank() }.joinToString(" + ").ifBlank { if (isBn) "দোকানের মালিক" else "Shop Owner" }
                             Text(
                                 text = ownerTitle,
@@ -1051,7 +1183,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             AsyncImage(
-                                model = shopPic,
+                                model = rememberImageModel(shopPic),
                                 contentDescription = "Shop Front Banner",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -1076,7 +1208,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                     .padding(12.dp)
                             ) {
                                 Text(
-                                    text = user?.shopName ?: "",
+                                    text = user?.getLocalizedShopName(isBn) ?: "",
                                     color = Color.White,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold
@@ -1481,7 +1613,7 @@ fun ActivityLogItem(
 
                 if (!photoUri.isNullOrEmpty()) {
                     coil.compose.AsyncImage(
-                        model = photoUri,
+                        model = rememberImageModel(photoUri),
                         contentDescription = null,
                         modifier = Modifier
                             .size(34.dp)

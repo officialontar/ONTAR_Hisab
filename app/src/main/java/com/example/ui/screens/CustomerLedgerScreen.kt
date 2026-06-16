@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -55,9 +57,9 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
 
     val eligibleCustomersForSms = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
     val (smsTodayStr, smsNextStr) = getSmsDates(isBn)
-    val smsShopName = currentUser?.shopName ?: if (isBn) "আমার দোকান" else "My Shop"
+    val smsShopName = currentUser?.getLocalizedShopName(isBn) ?: if (isBn) "আমার দোকান" else "My Shop"
     val smsShopPhone = currentUser?.phone ?: ""
-    val smsOwnerName = currentUser?.ownerName ?: ""
+    val smsOwnerName = currentUser?.getLocalizedOwnerName(isBn) ?: ""
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -129,6 +131,26 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
     ) { uri: Uri? ->
         if (uri != null) {
             viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editCustomerPhotoUri = base64
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                customerPhotoUri = base64
+            }
+        }
+    }
+
+    val editCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
                 editCustomerPhotoUri = base64
             }
         }
@@ -707,58 +729,193 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.height(10.dp))
 
                             // Photo selection block
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(colors.primary.copy(alpha = 0.05f))
                                     .padding(10.dp)
                             ) {
-                                if (customerPhotoUri.isNotEmpty()) {
-                                    coil.compose.AsyncImage(
-                                        model = customerPhotoUri,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                             .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(colors.primary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Person, null, tint = colors.primary)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (customerPhotoUri.isNotEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = rememberImageModel(customerPhotoUri),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(colors.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, null, tint = colors.primary)
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "কাস্টমার প্রোফাইল ছবি" else "Customer Profile Photo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (customerPhotoUri.isEmpty()) {
+                                                (if (isBn) "ডিফল্ট ছবি, গ্যালারি বা ক্যামেরা থেকে ছবি নিন" else "Choose default, gallery or camera")
+                                            } else {
+                                                (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.onBackground.copy(alpha = 0.5f)
+                                        )
                                     }
                                 }
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (isBn) "কাস্টমার প্রোফাইল ছবি" else "Customer Profile Photo",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (customerPhotoUri.isEmpty()) {
-                                            (if (isBn) "ছবি সিলেক্ট করা হয়নি (ঐচ্ছিক)" else "No selected image (optional)")
-                                        } else {
-                                             (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = colors.onBackground.copy(alpha = 0.5f)
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(10.dp))
 
-                                IconButton(
-                                    onClick = { photoPickerLauncher.launch("image/*") },
-                                    modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Choose Photo", tint = colors.primary)
+                                    // Gallery Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { photoPickerLauncher.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Choose from Gallery",
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    // Camera Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { cameraLauncher.launch(null) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.size(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp, 14.dp)
+                                                    .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .border(1.8.dp, colors.primary, CircleShape)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(5.dp, 2.dp)
+                                                    .align(Alignment.TopCenter)
+                                                    .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                            )
+                                        }
+                                    }
+
+                                    val defaultAvatars = listOf(
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
+                                    )
+
+                                    val isCustomSelected = customerPhotoUri.isNotEmpty() && !defaultAvatars.contains(customerPhotoUri)
+                                    if (isCustomSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                .clickable { /* Already selected */ }
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = rememberImageModel(customerPhotoUri),
+                                                contentDescription = "Selected Gallery Image",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color.Black.copy(alpha = 0.3f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    defaultAvatars.forEach { avatarUrl ->
+                                        val isSelected = customerPhotoUri == avatarUrl
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                .clickable { customerPhotoUri = avatarUrl }
+                                                .then(
+                                                    if (isSelected) {
+                                                        Modifier.border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = avatarUrl,
+                                                contentDescription = "Default Avatar",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            if (isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color.Black.copy(alpha = 0.3f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -862,40 +1019,194 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.primary.copy(alpha = 0.05f))
+                                    .padding(10.dp)
                             ) {
-                                if (editCustomerPhotoUri.isNotEmpty()) {
-                                    coil.compose.AsyncImage(
-                                        model = editCustomerPhotoUri,
-                                        contentDescription = "Edit Customer image",
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(colors.primary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Person, null, tint = colors.primary)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (editCustomerPhotoUri.isNotEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = rememberImageModel(editCustomerPhotoUri),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(colors.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, null, tint = colors.primary)
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "কাস্টমার প্রোফাইল ছবি" else "Customer Profile Photo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (editCustomerPhotoUri.isEmpty()) {
+                                                (if (isBn) "ডিফল্ট ছবি বা গ্যালারি থেকে সিলেক্ট করুন" else "Select default avatar or from gallery")
+                                            } else {
+                                                (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.onBackground.copy(alpha = 0.5f)
+                                        )
                                     }
                                 }
 
-                                Button(
-                                    onClick = { editPhotoPickerLauncher.launch("image/*") },
-                                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryContainer, contentColor = colors.onSecondaryContainer),
-                                    modifier = Modifier.testTag("btn_edit_customer_photo")
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(if (isBn) "ছবি পরিবর্তন" else "Change Photo", fontSize = 11.sp)
+                                    // Gallery Picker Card
+                                    // Gallery Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { editPhotoPickerLauncher.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Choose from Gallery",
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    // Camera Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { editCameraLauncher.launch(null) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.size(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp, 14.dp)
+                                                    .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .border(1.8.dp, colors.primary, CircleShape)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(5.dp, 2.dp)
+                                                    .align(Alignment.TopCenter)
+                                                    .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                            )
+                                        }
+                                    }
+
+                                    val defaultAvatars = listOf(
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
+                                    )
+
+                                    val isCustomSelected = editCustomerPhotoUri.isNotEmpty() && !defaultAvatars.contains(editCustomerPhotoUri)
+                                    if (isCustomSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                .clickable { /* Already selected */ }
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = rememberImageModel(editCustomerPhotoUri),
+                                                contentDescription = "Selected Gallery Image",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color.Black.copy(alpha = 0.3f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    defaultAvatars.forEach { avatarUrl ->
+                                        val isSelected = editCustomerPhotoUri == avatarUrl
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                .clickable { editCustomerPhotoUri = avatarUrl }
+                                                .then(
+                                                    if (isSelected) {
+                                                        Modifier.border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = avatarUrl,
+                                                contentDescription = "Default Avatar",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            if (isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color.Black.copy(alpha = 0.3f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -990,7 +1301,36 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                 val customer = selectedCustomerForHistory!!
                 val allTx by viewModel.transactions.collectAsState()
                 val customerTransactions = remember(allTx, customer) {
-                    allTx.filter { it.customerId == customer.id }
+                    val filtered = allTx.filter { it.customerId == customer.id }.sortedBy { it.timestamp }
+                    
+                    var movingDeltaSum = 0.0
+                    filtered.forEach { tx ->
+                        if (tx.type == "CUSTOMER_DUE" || tx.type == "SALE") {
+                            movingDeltaSum += tx.amount
+                        } else if (tx.type == "CUSTOMER_PAYMENT") {
+                            movingDeltaSum -= tx.amount
+                        }
+                    }
+                    val openingBalance = customer.totalDue - movingDeltaSum
+                    
+                    if (java.lang.Math.abs(openingBalance) > 0.01) {
+                        val earliestTimestamp = filtered.firstOrNull()?.timestamp ?: System.currentTimeMillis()
+                        val openingTimestamp = earliestTimestamp - 60000L // 1 minute before the earliest subsequent transaction
+                        
+                        val openingTx = com.example.data.TransactionRecord(
+                            id = -999,
+                            userEmail = customer.userEmail,
+                            type = if (openingBalance > 0) "CUSTOMER_DUE" else "CUSTOMER_PAYMENT",
+                            amount = java.lang.Math.abs(openingBalance),
+                            title = if (isBn) "প্রারম্ভিক ব্যালেন্স (ওপেনিং)" else "Opening Balance",
+                            description = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance",
+                            timestamp = openingTimestamp,
+                            customerId = customer.id
+                        )
+                        (listOf(openingTx) + filtered).sortedBy { it.timestamp }
+                    } else {
+                        filtered
+                    }
                 }
 
                 AlertDialog(
@@ -1360,9 +1700,9 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
             if (showBulkSmsDialog) {
                 val eligibleCustomers = customersList.filter { it.totalDue > 0 && it.phone.isNotBlank() }
                 val (todayStr, nextStr) = getSmsDates(isBn)
-                val shopName = currentUser?.shopName ?: if (isBn) "আমার দোকান" else "My Shop"
+                val shopName = currentUser?.getLocalizedShopName(isBn) ?: if (isBn) "আমার দোকান" else "My Shop"
                 val shopPhone = currentUser?.phone ?: ""
-                val ownerName = currentUser?.ownerName ?: ""
+                val ownerName = currentUser?.getLocalizedOwnerName(isBn) ?: ""
 
                 AlertDialog(
                     onDismissRequest = { showBulkSmsDialog = false },
@@ -2101,7 +2441,7 @@ fun CustomerRecordCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         if (!customer.photoUri.isNullOrEmpty()) {
                             coil.compose.AsyncImage(
-                                model = customer.photoUri,
+                                model = rememberImageModel(customer.photoUri),
                                 contentDescription = "Customer Photo",
                                 modifier = Modifier
                                     .size(44.dp)

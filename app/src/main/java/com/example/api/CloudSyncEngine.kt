@@ -19,7 +19,8 @@ data class SyncPayload(
     val dealers: List<Dealer> = emptyList(),
     val transactions: List<TransactionRecord> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
-    val registrationTimestamp: Long? = null
+    val registrationTimestamp: Long? = null,
+    val additionalShops: List<User> = emptyList()
 )
 
 object CloudSyncEngine {
@@ -273,7 +274,7 @@ object CloudSyncEngine {
                     
                     // Support standard plaintext newline formats as well as JSON listings
                     val cleanRaw = raw.replace("[", "").replace("]", "")
-                    val keys = cleanRaw.split(Regex("[\n,\r]"))
+                    val keys = cleanRaw.split(Regex("[\n\r,]+"))
                         .map { it.replace("\"", "").trim() }
                         .filter { it.startsWith("user_") && it.isNotBlank() }
                         .distinct()

@@ -107,6 +107,26 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val newShopCameraLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicturePreview()
+                ) { bitmap ->
+                    if (bitmap != null) {
+                        viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                            newShopPicPreset = base64
+                        }
+                    }
+                }
+
+                val newOwnerCameraLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicturePreview()
+                ) { bitmap ->
+                    if (bitmap != null) {
+                        viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                            newOwnerPicPreset = base64
+                        }
+                    }
+                }
+
                 val colors = MaterialTheme.colorScheme
 
                 Scaffold(
@@ -330,7 +350,7 @@ class MainActivity : ComponentActivity() {
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     AsyncImage(
-                                                        model = user.profilePicture ?: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                                        model = rememberImageModel(user.profilePicture ?: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"),
                                                         contentDescription = null,
                                                         modifier = Modifier
                                                             .size(54.dp)
@@ -340,13 +360,13 @@ class MainActivity : ComponentActivity() {
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
-                                                            text = user.shopName ?: "",
+                                                            text = user.getLocalizedShopName(isBn),
                                                             style = MaterialTheme.typography.bodyLarge,
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = colors.primary
                                                         )
                                                         Spacer(modifier = Modifier.height(4.dp))
-                                                        val details = com.example.data.OwnerParser.getFormattedOwnersDetails(user.ownerName, user.phone, user.email)
+                                                        val details = com.example.data.OwnerParser.getFormattedOwnersDetails(user.getLocalizedOwnerName(isBn), user.phone, user.email)
                                                         Text(
                                                             text = details,
                                                             style = MaterialTheme.typography.bodyMedium,
@@ -389,7 +409,7 @@ class MainActivity : ComponentActivity() {
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 AsyncImage(
-                                                    model = shopUser.shopPicture ?: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
+                                                    model = rememberImageModel(shopUser.shopPicture ?: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"),
                                                     contentDescription = null,
                                                     modifier = Modifier
                                                         .size(36.dp)
@@ -398,13 +418,13 @@ class MainActivity : ComponentActivity() {
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
-                                                        text = shopUser.shopName ?: "",
+                                                        text = shopUser.getLocalizedShopName(isBn),
                                                         fontSize = 13.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = colors.onSurface
                                                     )
                                                     Text(
-                                                        text = shopUser.ownerName?.let { com.example.data.OwnerParser.deserialize(it, shopUser.phone, shopUser.email).map { o -> o.name }.filter { n -> n.isNotBlank() }.joinToString(", ") } ?: (if (isBn) "মালিক" else "Owner"),
+                                                        text = com.example.data.OwnerParser.deserialize(shopUser.getLocalizedOwnerName(isBn), shopUser.phone, shopUser.email).map { o -> o.name }.filter { n -> n.isNotBlank() }.joinToString(", "),
                                                         fontSize = 11.sp,
                                                         color = colors.onSurface.copy(alpha = 0.6f)
                                                     )
@@ -885,15 +905,52 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         Spacer(modifier = Modifier.height(6.dp))
-                                        OutlinedButton(
-                                            onClick = { newShopPicLauncher.launch("image/*") },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Main Gallery Image", fontSize = 11.sp)
-                                        }
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                         ) {
+                                             OutlinedButton(
+                                                 onClick = { newShopPicLauncher.launch("image/*") },
+                                                 modifier = Modifier.weight(1f),
+                                                 shape = RoundedCornerShape(10.dp),
+                                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                             ) {
+                                                 Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                                 Spacer(modifier = Modifier.width(4.dp))
+                                                 Text(text = if (isBn) "গ্যালারি ছবি" else "Gallery Picture", fontSize = 11.sp)
+                                             }
+
+                                             OutlinedButton(
+                                                 onClick = { newShopCameraLauncher.launch(null) },
+                                                 modifier = Modifier.weight(1f),
+                                                 shape = RoundedCornerShape(10.dp),
+                                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                             ) {
+                                                 Box(
+                                                     modifier = Modifier.size(16.dp),
+                                                     contentAlignment = Alignment.Center
+                                                 ) {
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(15.dp, 10.dp)
+                                                             .border(1.2.dp, colors.primary, RoundedCornerShape(1.5.dp))
+                                                     )
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(5.5.dp)
+                                                             .border(1.2.dp, colors.primary, CircleShape)
+                                                     )
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(4.dp, 1.2.dp)
+                                                             .align(Alignment.TopCenter)
+                                                             .background(colors.primary, RoundedCornerShape(topStart = 0.5.dp, topEnd = 0.5.dp))
+                                                     )
+                                                 }
+                                                 Spacer(modifier = Modifier.width(4.dp))
+                                                 Text(text = if (isBn) "ক্যামেরা ছবি" else "Camera Picture", fontSize = 11.sp)
+                                             }
+                                         }
 
                                         val isCustomShop = !listOf(
                                             "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
@@ -913,7 +970,7 @@ class MainActivity : ComponentActivity() {
                                                     .padding(4.dp)
                                             ) {
                                                 AsyncImage(
-                                                    model = newShopPicPreset,
+                                                    model = rememberImageModel(newShopPicPreset),
                                                     contentDescription = null,
                                                     modifier = Modifier
                                                         .size(30.dp)
@@ -986,15 +1043,52 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         Spacer(modifier = Modifier.height(6.dp))
-                                        OutlinedButton(
-                                            onClick = { newOwnerPicLauncher.launch("image/*") },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = if (isBn) "গ্যালারি থেকে নিজের ছবি দিন" else "Choose Owner Profile Picture", fontSize = 11.sp)
-                                        }
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                         ) {
+                                             OutlinedButton(
+                                                 onClick = { newOwnerPicLauncher.launch("image/*") },
+                                                 modifier = Modifier.weight(1f),
+                                                 shape = RoundedCornerShape(10.dp),
+                                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                             ) {
+                                                 Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                                 Spacer(modifier = Modifier.width(4.dp))
+                                                 Text(text = if (isBn) "গ্যালারি ছবি" else "Gallery Profile", fontSize = 11.sp)
+                                             }
+
+                                             OutlinedButton(
+                                                 onClick = { newOwnerCameraLauncher.launch(null) },
+                                                 modifier = Modifier.weight(1f),
+                                                 shape = RoundedCornerShape(10.dp),
+                                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                             ) {
+                                                 Box(
+                                                     modifier = Modifier.size(16.dp),
+                                                     contentAlignment = Alignment.Center
+                                                 ) {
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(15.dp, 10.dp)
+                                                             .border(1.2.dp, colors.primary, RoundedCornerShape(1.5.dp))
+                                                     )
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(5.5.dp)
+                                                             .border(1.2.dp, colors.primary, CircleShape)
+                                                     )
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .size(4.dp, 1.2.dp)
+                                                             .align(Alignment.TopCenter)
+                                                             .background(colors.primary, RoundedCornerShape(topStart = 0.5.dp, topEnd = 0.5.dp))
+                                                     )
+                                                 }
+                                                 Spacer(modifier = Modifier.width(4.dp))
+                                                 Text(text = if (isBn) "ক্যামেরা ছবি" else "Camera Profile", fontSize = 11.sp)
+                                             }
+                                         }
 
                                         val isCustomOwner = !listOf(
                                             "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
@@ -1014,7 +1108,7 @@ class MainActivity : ComponentActivity() {
                                                     .padding(4.dp)
                                             ) {
                                                 AsyncImage(
-                                                    model = newOwnerPicPreset,
+                                                    model = rememberImageModel(newOwnerPicPreset),
                                                     contentDescription = null,
                                                     modifier = Modifier
                                                         .size(30.dp)

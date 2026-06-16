@@ -5,10 +5,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -96,6 +101,26 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
     ) { uri: Uri? ->
         if (uri != null) {
             viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editDealerPhotoUri = base64
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                dealerPhotoUri = base64
+            }
+        }
+    }
+
+    val editCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
                 editDealerPhotoUri = base64
             }
         }
@@ -366,7 +391,45 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                             }
                         }
 
-                        // 2. Empty Matching State Block inside LazyColumn
+                        // 2. Export to Excel Button (Scroll with the list)
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        saveDealerCsvToDownloads(context, isBn, dealersList)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF107C41), // Microsoft Excel brand green
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_export_dealers_excel"),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Excel Icon",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isBn) "সকল ডিলার ও পাওনাদারের তালিকা এক্সেল শিট আকারে ডাউনলোড করুন" else "Download dealers list to Excel Sheet",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 18.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        // 3. Empty Matching State Block inside LazyColumn
                         if (filteredDealers.isEmpty()) {
                             item {
                                 Column(
@@ -556,58 +619,193 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.height(10.dp))
 
                             // Photo Selector for Suppliers
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(colors.primary.copy(alpha = 0.05f))
                                     .padding(10.dp)
                             ) {
-                                if (dealerPhotoUri.isNotEmpty()) {
-                                    coil.compose.AsyncImage(
-                                        model = dealerPhotoUri,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(colors.secondary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Person, null, tint = colors.secondary)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (dealerPhotoUri.isNotEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = rememberImageModel(dealerPhotoUri),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(colors.secondary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, null, tint = colors.secondary)
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "ডিলারের ছবি" else "Supplier Photo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (dealerPhotoUri.isEmpty()) {
+                                                (if (isBn) "ডিফল্ট ছবি বা গ্যালারি থেকে সিলেক্ট করুন" else "Select default avatar or from gallery")
+                                            } else {
+                                                (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.onBackground.copy(alpha = 0.5f)
+                                        )
                                     }
                                 }
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (isBn) "ডিলারের ছবি" else "Supplier Photo",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (dealerPhotoUri.isEmpty()) {
-                                            (if (isBn) "ছবি সিলেক্ট করা হয়নি (ঐচ্ছিক)" else "No selected image (optional)")
-                                        } else {
-                                            (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = colors.onBackground.copy(alpha = 0.5f)
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(10.dp))
 
-                                IconButton(
-                                    onClick = { dealerPhotoLauncher.launch("image/*") },
-                                    modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Choose Photo", tint = colors.primary)
+                                    // Gallery Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { dealerPhotoLauncher.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Choose from Gallery",
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    // Camera Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { cameraLauncher.launch(null) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.size(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp, 14.dp)
+                                                    .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .border(1.8.dp, colors.primary, CircleShape)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(5.dp, 2.dp)
+                                                    .align(Alignment.TopCenter)
+                                                    .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                            )
+                                        }
+                                    }
+
+                                    val defaultAvatars = listOf(
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
+                                    )
+
+                                    val isCustomSelected = dealerPhotoUri.isNotEmpty() && !defaultAvatars.contains(dealerPhotoUri)
+                                    if (isCustomSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                .clickable { /* Already selected */ }
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = rememberImageModel(dealerPhotoUri),
+                                                contentDescription = "Selected Gallery Image",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color.Black.copy(alpha = 0.3f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    defaultAvatars.forEach { avatarUrl ->
+                                        val isSelected = dealerPhotoUri == avatarUrl
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                .clickable { dealerPhotoUri = avatarUrl }
+                                                .then(
+                                                    if (isSelected) {
+                                                        Modifier.border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = avatarUrl,
+                                                contentDescription = "Default Avatar",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            if (isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color.Black.copy(alpha = 0.3f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -711,40 +909,193 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.primary.copy(alpha = 0.05f))
+                                    .padding(10.dp)
                             ) {
-                                if (editDealerPhotoUri.isNotEmpty()) {
-                                    coil.compose.AsyncImage(
-                                        model = editDealerPhotoUri,
-                                        contentDescription = "Edit Dealer Photo",
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(colors.secondary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Person, null, tint = colors.secondary)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (editDealerPhotoUri.isNotEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = rememberImageModel(editDealerPhotoUri),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(colors.secondary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Person, null, tint = colors.secondary)
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBn) "ডিলারের ছবি" else "Supplier Photo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (editDealerPhotoUri.isEmpty()) {
+                                                (if (isBn) "ডিফল্ট ছবি বা গ্যালারি থেকে সিলেক্ট করুন" else "Select default avatar or from gallery")
+                                            } else {
+                                                (if (isBn) "ছবি সিলেক্ট করা হয়েছে!" else "Image selected successfully!")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.onBackground.copy(alpha = 0.5f)
+                                        )
                                     }
                                 }
 
-                                Button(
-                                    onClick = { editDealerPhotoLauncher.launch("image/*") },
-                                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryContainer, contentColor = colors.onSecondaryContainer),
-                                    modifier = Modifier.testTag("btn_edit_dealer_photo")
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(if (isBn) "ছবি পরিবর্তন" else "Change Photo", fontSize = 11.sp)
+                                    // Gallery Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { editDealerPhotoLauncher.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Choose from Gallery",
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+
+                                    // Camera Picker Card
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.primary.copy(alpha = 0.12f))
+                                            .clickable { editCameraLauncher.launch(null) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.size(24.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp, 14.dp)
+                                                    .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .border(1.8.dp, colors.primary, CircleShape)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(5.dp, 2.dp)
+                                                    .align(Alignment.TopCenter)
+                                                    .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                            )
+                                        }
+                                    }
+
+                                    val defaultAvatars = listOf(
+                                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+                                        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
+                                    )
+
+                                    val isCustomSelected = editDealerPhotoUri.isNotEmpty() && !defaultAvatars.contains(editDealerPhotoUri)
+                                    if (isCustomSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                .clickable { /* Already selected */ }
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = rememberImageModel(editDealerPhotoUri),
+                                                contentDescription = "Selected Gallery Image",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color.Black.copy(alpha = 0.3f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    defaultAvatars.forEach { avatarUrl ->
+                                        val isSelected = editDealerPhotoUri == avatarUrl
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
+                                                .clickable { editDealerPhotoUri = avatarUrl }
+                                                .then(
+                                                    if (isSelected) {
+                                                        Modifier.border(2.dp, colors.primary, RoundedCornerShape(8.dp))
+                                                    } else {
+                                                        Modifier
+                                                    }
+                                                )
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = avatarUrl,
+                                                contentDescription = "Default Avatar",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            if (isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color.Black.copy(alpha = 0.3f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -898,7 +1249,37 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                 val dealer = selectedDealerForHistory!!
                 val allTransactions by viewModel.transactions.collectAsState()
                 val dealerTransactions = remember(allTransactions, dealer.id) {
-                    allTransactions.filter { it.dealerId == dealer.id }.sortedByDescending { it.timestamp }
+                    val filtered = allTransactions.filter { it.dealerId == dealer.id }.sortedBy { it.timestamp }
+                    
+                    var movingDeltaSum = 0.0
+                    filtered.forEach { tx ->
+                        if (tx.type == "EXPENSE") { // Purchase from dealer, increases totalOwed
+                            movingDeltaSum += tx.amount
+                        } else if (tx.type == "DEALER_PAYMENT") { // Paid them, decreases totalOwed
+                            movingDeltaSum -= tx.amount
+                        }
+                    }
+                    val openingOwed = dealer.totalOwed - movingDeltaSum
+                    
+                    val finalList = if (java.lang.Math.abs(openingOwed) > 0.01) {
+                        val earliestTimestamp = filtered.firstOrNull()?.timestamp ?: System.currentTimeMillis()
+                        val openingTimestamp = earliestTimestamp - 60000L // 1 minute before earliest subsequent transaction
+                        
+                        val openingTx = com.example.data.TransactionRecord(
+                            id = -999,
+                            userEmail = dealer.userEmail,
+                            type = if (openingOwed > 0) "EXPENSE" else "DEALER_PAYMENT",
+                            amount = java.lang.Math.abs(openingOwed),
+                            title = if (isBn) "প্রারম্ভিক পাওনা (ওপেনিং)" else "Opening Owed Balance",
+                            description = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance",
+                            timestamp = openingTimestamp,
+                            dealerId = dealer.id
+                        )
+                        (listOf(openingTx) + filtered).sortedBy { it.timestamp }
+                    } else {
+                        filtered
+                    }
+                    finalList.sortedByDescending { it.timestamp }
                 }
 
                 AlertDialog(
@@ -1272,7 +1653,7 @@ fun DealerRecordCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         if (!dealer.photoUri.isNullOrEmpty()) {
                             coil.compose.AsyncImage(
-                                model = dealer.photoUri,
+                                model = rememberImageModel(dealer.photoUri),
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(42.dp)
@@ -1510,6 +1891,121 @@ fun DealerRecordCard(
                     )
                 }
             }
+        }
+    }
+}
+
+fun saveDealerCsvToDownloads(context: android.content.Context, isBn: Boolean, dealers: List<Dealer>) {
+    try {
+        val fileName = if (isBn) "ডিলার_ও_পাওনাদার_তালিকা.csv" else "Dealer_and_Creditor_List.csv"
+        val csvBuilder = java.lang.StringBuilder()
+        
+        // Add UTF-8 BOM so Excel opens it with Bengali characters correctly
+        csvBuilder.append('\uFEFF')
+        
+        val headers = if (isBn) {
+            listOf("সিরিয়াল নম্বর", "ডিলারের নাম", "মোবাইল নম্বর", "কোম্পানির নাম", "পাওনা পরিমাণ (টাকা)")
+        } else {
+            listOf("Serial Number", "Dealer Name", "Mobile Number", "Company Name", "Amount Due (BDT)")
+        }
+        
+        csvBuilder.append(headers.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+        csvBuilder.append("\n")
+        
+        val sortedList = dealers.sortedBy { it.id }
+        sortedList.forEachIndexed { index, dealer ->
+            val sn = (index + 1).toString()
+            val name = dealer.name
+            val phone = dealer.phone
+            val company = dealer.company ?: ""
+            val due = dealer.totalOwed.toString()
+            
+            val row = listOf(sn, name, phone, company, due)
+            csvBuilder.append(row.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+            csvBuilder.append("\n")
+        }
+        
+        val csvContent = csvBuilder.toString()
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(csvContent.toByteArray(Charsets.UTF_8))
+                }
+                val successMsg = if (isBn) {
+                    "ডিলার তালিকা সফলভাবে 'Downloads' ফোল্ডারে সেভ হয়েছে!"
+                } else {
+                    "Dealer list successfully saved in 'Downloads' folder!"
+                }
+                android.widget.Toast.makeText(context, successMsg, android.widget.Toast.LENGTH_LONG).show()
+                
+                // Share intent fallback so they can directly open/share as well
+                try {
+                    val viewIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(viewIntent, if (isBn) "ডিলার তালিকা শেয়ার করুন" else "Share Dealer List"))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            } else {
+                throw java.io.IOException("Failed to create MediaStore entry")
+            }
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = java.io.File(downloadsDir, fileName)
+            file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
+            val successMsg = if (isBn) {
+                "ডিলার তালিকা সফলভাবে 'Downloads' ফোল্ডারে সেভ হয়েছে!"
+            } else {
+                "Dealer list successfully saved in 'Downloads' folder!"
+            }
+            android.widget.Toast.makeText(context, successMsg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        try {
+            val cacheFile = java.io.File(context.cacheDir, if (isBn) "ডিলার_ও_পাওনাদার_তালিকা.csv" else "Dealer_and_Creditor_List.csv")
+            val csvBuilder = java.lang.StringBuilder()
+            csvBuilder.append('\uFEFF')
+            val headers = if (isBn) {
+                listOf("সিরিয়াল নম্বর", "ডিলারের নাম", "মোবাইল নম্বর", "কোম্পানির নাম", "পাওনা পরিমাণ (টাকা)")
+            } else {
+                listOf("Serial Number", "Dealer Name", "Mobile Number", "Company Name", "Amount Due (BDT)")
+            }
+            csvBuilder.append(headers.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+            csvBuilder.append("\n")
+            
+            dealers.sortedBy { it.id }.forEachIndexed { index, dealer ->
+                val sn = (index + 1).toString()
+                val name = dealer.name
+                val phone = dealer.phone
+                val company = dealer.company ?: ""
+                val due = dealer.totalOwed.toString()
+                val row = listOf(sn, name, phone, company, due)
+                csvBuilder.append(row.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
+                csvBuilder.append("\n")
+            }
+            cacheFile.writeText(csvBuilder.toString(), Charsets.UTF_8)
+            val cacheUri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, cacheUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, if (isBn) "ডিলার তালিকা শেয়ার করুন" else "Share Dealer List"))
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+            android.widget.Toast.makeText(context, if (isBn) "ডাউনলোড বা শেয়ার করতে ব্যর্থ: ${e.message}" else "Failed to save or share list: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 }

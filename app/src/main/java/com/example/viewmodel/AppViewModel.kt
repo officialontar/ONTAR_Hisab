@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppViewModel(private val repository: AppRepository, private val application: android.app.Application) : ViewModel() {
+class AppViewModel(val repository: AppRepository, private val application: android.app.Application) : ViewModel() {
 
     private val prefs = application.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
 
@@ -44,40 +44,95 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         return try {
             val contentResolver = context.contentResolver
             
-            // First, decode with inJustDecodeBounds=true to check dimensions to avoid OOM
+            // Create a temporary cache file to copy the stream to
+            val tempFile = java.io.File.createTempFile("pic_upload_", ".jpg", context.cacheDir)
+            
+            // Copy stream securely
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                tempFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            } ?: return null
+            
+            if (tempFile.length() == 0L) {
+                tempFile.delete()
+                return null
+            }
+            
+            // Decode the file safely
             val options = android.graphics.BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
-            contentResolver.openInputStream(uri)?.use { stream ->
-                android.graphics.BitmapFactory.decodeStream(stream, null, options)
-            }
+            android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, options)
             
-            val reqWidth = 180
-            val reqHeight = 180
+            // Check original dimensions
             var inSampleSize = 1
-            if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
+            val maxDimension = 150
+            if (options.outHeight > maxDimension || options.outWidth > maxDimension) {
                 val halfHeight = options.outHeight / 2
                 val halfWidth = options.outWidth / 2
-                while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                while ((halfHeight / inSampleSize) >= maxDimension && (halfWidth / inSampleSize) >= maxDimension) {
                     inSampleSize *= 2
                 }
             }
             
-            // Decode bitmap with calculated inSampleSize
+            // Decode with sample size
             val decodeOptions = android.graphics.BitmapFactory.Options().apply {
-                inSampleSize = inSampleSize
+                this.inSampleSize = inSampleSize
             }
-            val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
-                android.graphics.BitmapFactory.decodeStream(stream, null, decodeOptions)
-            } ?: return null
+            val bitmap = android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, decodeOptions)
             
-            // Scale to final exact size if needed
-            val scaledBitmap = if (bitmap.width > 200 || bitmap.height > 200) {
+            // Delete temp file after decoding to be clean
+            try {
+                tempFile.delete()
+            } catch (e: Exception) {
+                // ignore
+            }
+            
+            if (bitmap == null) return null
+            
+            // Resize precisely to standard 120 size (nice and neat, around 2-3KB to prevent payload limits)
+            val targetSize = 120
+            val scaledBitmap = if (bitmap.width > targetSize || bitmap.height > targetSize) {
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                 val (newWidth, newHeight) = if (ratio > 1f) {
-                    200 to (200 / ratio).toInt()
+                    targetSize to (targetSize / ratio).toInt()
                 } else {
-                    (200 * ratio).toInt() to 200
+                    (targetSize * ratio).toInt() to targetSize
+                }
+                android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+            } else {
+                bitmap
+            }
+            
+            // Compress deeply
+            val outputStream = java.io.ByteArrayOutputStream()
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            val imageBytes = outputStream.toByteArray()
+            
+            // Recycle both to free memory immediately
+            if (bitmap != scaledBitmap) {
+                bitmap.recycle()
+            }
+            scaledBitmap.recycle()
+            
+            val base64String = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
+            "data:image/jpeg;base64,$base64String"
+        } catch (t: Throwable) {
+            android.util.Log.e("AppViewModel", "Extremely robust conversion failed: ${t.message}", t)
+            null
+        }
+    }
+
+    fun bitmapToBase64(bitmap: android.graphics.Bitmap): String? {
+        return try {
+            val targetSize = 120
+            val scaledBitmap = if (bitmap.width > targetSize || bitmap.height > targetSize) {
+                val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                val (newWidth, newHeight) = if (ratio > 1f) {
+                    targetSize to (targetSize / ratio).toInt()
+                } else {
+                    (targetSize * ratio).toInt() to targetSize
                 }
                 android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
             } else {
@@ -85,12 +140,18 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             }
             
             val outputStream = java.io.ByteArrayOutputStream()
-            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, outputStream)
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
             val imageBytes = outputStream.toByteArray()
+            
+            if (bitmap != scaledBitmap) {
+                bitmap.recycle()
+            }
+            scaledBitmap.recycle()
+            
             val base64String = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
             "data:image/jpeg;base64,$base64String"
         } catch (t: Throwable) {
-            t.printStackTrace()
+            android.util.Log.e("AppViewModel", "Bitmap to Base64 failed: ${t.message}", t)
             null
         }
     }
@@ -132,6 +193,155 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
     private var lastProfileUpdateTime = 0L
+    private var lastLocalDbMutationTime = 0L
+
+    private fun markLocalMutation() {
+        lastLocalDbMutationTime = System.currentTimeMillis()
+    }
+
+    fun updateActiveUserDynamicIpAndDevice() {
+        val current = _currentUser.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val currentDeviceName = getDeviceName()
+                var ip = "Unknown"
+                var loc = "Unknown"
+                
+                // 1. Try public IP APIs
+                val ipEndpoints = listOf(
+                    "https://api.ipify.org",
+                    "https://icanhazip.com",
+                    "https://checkip.amazonaws.com",
+                    "https://ipinfo.io/ip"
+                )
+                for (endpoint in ipEndpoints) {
+                    try {
+                        val url = java.net.URL(endpoint)
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 4000
+                        conn.readTimeout = 4000
+                        val rawText = conn.inputStream.bufferedReader().use { it.readText() }.trim()
+                        if (rawText.isNotBlank() && (rawText.contains(".") || rawText.contains(":"))) {
+                            ip = rawText
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.w("AppViewModel", "Failed to fetch IP from $endpoint", e)
+                    }
+                }
+
+                if (ip == "Unknown") {
+                    // Try ip-api.com
+                    try {
+                        val url = java.net.URL("https://ip-api.com/json")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 4000
+                        conn.readTimeout = 4000
+                        val resText = conn.inputStream.bufferedReader().use { it.readText() }
+                        val obj = org.json.JSONObject(resText)
+                        if (obj.optString("status") == "success") {
+                            ip = obj.optString("query", "Unknown")
+                            val city = obj.optString("city", "")
+                            val rName = obj.optString("regionName", "")
+                            val cName = obj.optString("country", "")
+                            val locParts = listOf(city, rName, cName).filter { it.isNotBlank() }
+                            loc = if (locParts.isNotEmpty()) locParts.joinToString(", ") else "Unknown"
+                        }
+                    } catch(ex: Exception) {}
+                }
+
+                // 2. Absolute fallback to active dynamic local IP if public lookup returned Unknown or failed
+                if (ip == "Unknown") {
+                    try {
+                        val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+                        if (interfaces != null) {
+                            for (intf in java.util.Collections.list(interfaces)) {
+                                val addrs = intf.inetAddresses
+                                for (addr in java.util.Collections.list(addrs)) {
+                                    if (!addr.isLoopbackAddress) {
+                                        val sAddr = addr.hostAddress
+                                        val isIPv4 = sAddr.indexOf(':') < 0
+                                        if (isIPv4) {
+                                            ip = sAddr
+                                            break
+                                        }
+                                    }
+                                }
+                                if (ip != "Unknown") break
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                // Always format current device entry with dynamic IP address
+                val deviceWithIp = if (ip != "Unknown") "$currentDeviceName (IP: $ip)" else currentDeviceName
+                
+                // Re-read user to avoid race conditions
+                val freshUser = repository.getUser(current.email) ?: current
+                
+                // Update active devices array
+                val activeArr = try {
+                    org.json.JSONArray(freshUser.activeDevicesJson ?: "[]")
+                } catch (e: Exception) {
+                    org.json.JSONArray()
+                }
+                
+                // Remove previous entries that represent this device of different / previous IPs
+                val rawList = mutableListOf<String>()
+                for (i in 0 until activeArr.length()) {
+                    val existingEntry = activeArr.getString(i)
+                    val baseExName = existingEntry.split(" (IP:").first().trim()
+                    if (baseExName != currentDeviceName) {
+                        rawList.add(existingEntry)
+                    }
+                }
+                
+                // Add our current device with current fresh IP
+                rawList.add(deviceWithIp)
+                
+                val updatedActiveJson = org.json.JSONArray()
+                rawList.distinct().forEach { updatedActiveJson.put(it) }
+                
+                val finalLoc = if (loc != "Unknown") loc else freshUser.registerLocation ?: "Unknown"
+                
+                val updatedUser = freshUser.copy(
+                    ipAddress = ip,
+                    registerLocation = finalLoc,
+                    activeDevicesJson = updatedActiveJson.toString()
+                )
+                
+                repository.updateUser(updatedUser)
+                withContext(Dispatchers.Main) {
+                    _currentUser.value = updatedUser
+                }
+                
+                // Push payload immediately to server to update Admin console in real time
+                try {
+                    val exPayload = com.example.api.CloudSyncEngine.downloadPayload(updatedUser.email)
+                    val newPayload = if (exPayload != null) {
+                        exPayload.copy(
+                            user = updatedUser,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    } else {
+                        com.example.api.SyncPayload(
+                            user = updatedUser,
+                            stockItems = repository.getStockItems(updatedUser.email).firstOrNull() ?: emptyList(),
+                            customers = repository.getCustomers(updatedUser.email).firstOrNull() ?: emptyList(),
+                            dealers = repository.getDealers(updatedUser.email).firstOrNull() ?: emptyList(),
+                            transactions = repository.getTransactions(updatedUser.email).firstOrNull() ?: emptyList(),
+                            timestamp = System.currentTimeMillis()
+                        )
+                    }
+                    com.example.api.CloudSyncEngine.uploadPayload(updatedUser.email, newPayload)
+                } catch (e: Exception) {
+                    Log.e("AppViewModel", "Failed to upload dynamic IP payload", e)
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Error in updateActiveUserDynamicIpAndDevice", e)
+            }
+        }
+    }
 
     // Authentication messages
     private val _authStateMessage = MutableStateFlow<String?>(null)
@@ -184,7 +394,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     fun switchActiveShop(targetUser: User) {
         viewModelScope.launch {
             _currentUser.value = targetUser
-            showToast(if (_isBengali.value) "${targetUser.shopName} এ পরিবর্তন করা হয়েছে" else "Switched to ${targetUser.shopName}")
+            showToast(if (_isBengali.value) "${targetUser.getLocalizedShopName(true)} এ পরিবর্তন করা হয়েছে" else "Switched to ${targetUser.getLocalizedShopName(false)}")
             loadShopsForActiveUser()
             triggerCloudSync(isManual = false)
         }
@@ -237,6 +447,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             _currentUser.collect { user ->
                 if (user != null) {
                     loadShopsForActiveUser()
+                    updateActiveUserDynamicIpAndDevice()
                     triggerCloudSync(isManual = false)
                 }
             }
@@ -333,7 +544,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         }
     }
 
-    fun triggerCloudSync(isManual: Boolean = true) {
+    fun triggerCloudSync(isManual: Boolean = true, uploadOnly: Boolean = false) {
         val user = _currentUser.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
             _isCloudSyncing.value = true
@@ -344,177 +555,242 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             }
 
             try {
-                // 1. Download payload from Cloud
-                val remotePayload = com.example.api.CloudSyncEngine.downloadPayload(user.email)
-                
+                var remotePayload: com.example.api.SyncPayload? = null
                 var activeUser = user
-                if (remotePayload != null) {
-                    val remoteUser = remotePayload.user
-                    val remoteTimestamp = remotePayload.timestamp
 
-                    // Only overwrite local user with remote user if remote payload is newer than our last edit
-                    val isRemoteNewer = remoteTimestamp > lastProfileUpdateTime
+                if (!uploadOnly) {
+                    // 1. Download payload from Cloud
+                    remotePayload = com.example.api.CloudSyncEngine.downloadPayload(user.email)
+                    
+                    if (remotePayload != null) {
+                        val remoteUser = remotePayload.user
+                        val remoteTimestamp = remotePayload.timestamp
 
-                    if (isRemoteNewer) {
-                        // Check blocks
-                        val currentDevice = getDeviceName()
-                        val blockedList = try {
-                            val arr = org.json.JSONArray(remoteUser.blockedDevicesJson ?: "[]")
-                            List(arr.length()) { i -> arr.getString(i) }
-                        } catch(e: Exception) { emptyList<String>() }
-                        
-                        val isAlwaysAdmin = remoteUser.email.trim().lowercase() == "mdanisujjamanontar@gmail.com"
-                        if ((remoteUser.isBlocked || blockedList.contains(currentDevice)) && !isAlwaysAdmin) {
-                            repository.updateUser(remoteUser)
+                        // Only overwrite local user with remote user if remote payload is newer than our last edit
+                        val isRemoteNewer = remoteTimestamp > lastProfileUpdateTime
+
+                        if (isRemoteNewer) {
+                            // Check blocks
+                            val currentDevice = getDeviceName()
+                            val blockedList = try {
+                                val arr = org.json.JSONArray(remoteUser.blockedDevicesJson ?: "[]")
+                                List(arr.length()) { i -> arr.getString(i) }
+                            } catch(e: Exception) { emptyList<String>() }
+                            
+                            val isAlwaysAdmin = remoteUser.email.trim().lowercase() == "mdanisujjamanontar@gmail.com"
+                            if ((remoteUser.isBlocked || blockedList.contains(currentDevice)) && !isAlwaysAdmin) {
+                                repository.updateUser(remoteUser)
+                                withContext(Dispatchers.Main) {
+                                    _currentUser.value = remoteUser
+                                    _isCloudSyncing.value = false
+                                }
+                                return@launch
+                            }
+                            
+                            // Update active devices lists
+                            val activeArr = try {
+                                org.json.JSONArray(remoteUser.activeDevicesJson ?: "[]")
+                            } catch(e: Exception) { org.json.JSONArray() }
+                            
+                            var hasOurDevice = false
+                            for (i in 0 until activeArr.length()) {
+                                if (activeArr.getString(i) == currentDevice) {
+                                    hasOurDevice = true
+                                    break
+                                }
+                            }
+                            if (!hasOurDevice) {
+                                activeArr.put(currentDevice)
+                            }
+                            
+                            val updatedUser = remoteUser.copy(
+                                activeDevicesJson = activeArr.toString(),
+                                registerDevice = remoteUser.registerDevice ?: currentDevice,
+                                isBlocked = false // safety
+                            )
+                            
+                            repository.updateUser(updatedUser)
+                            activeUser = updatedUser
+                            
                             withContext(Dispatchers.Main) {
-                                _currentUser.value = remoteUser
-                                _isCloudSyncing.value = false
-                            }
-                            return@launch
-                        }
-                        
-                        // Update active devices lists
-                        val activeArr = try {
-                            org.json.JSONArray(remoteUser.activeDevicesJson ?: "[]")
-                        } catch(e: Exception) { org.json.JSONArray() }
-                        
-                        var hasOurDevice = false
-                        for (i in 0 until activeArr.length()) {
-                            if (activeArr.getString(i) == currentDevice) {
-                                hasOurDevice = true
-                                break
+                                _currentUser.value = updatedUser
                             }
                         }
-                        if (!hasOurDevice) {
-                            activeArr.put(currentDevice)
-                        }
-                        
-                        val updatedUser = remoteUser.copy(
-                            activeDevicesJson = activeArr.toString(),
-                            registerDevice = remoteUser.registerDevice ?: currentDevice,
-                            isBlocked = false // safety
-                        )
-                        
-                        repository.updateUser(updatedUser)
-                        activeUser = updatedUser
-                        
-                        withContext(Dispatchers.Main) {
-                            _currentUser.value = updatedUser
-                        }
                     }
-                }
-                
-                // 2. Prepare local sets
-                val localStock = stockItems.value
-                val localCustomers = customers.value
-                val localDealers = dealers.value
-                val localTx = transactions.value
+                    // 2. Prepare local sets
+                    val localStock = stockItems.value
+                    val localCustomers = customers.value
+                    val localDealers = dealers.value
+                    val localTx = transactions.value
 
-                if (remotePayload != null) {
-                    // --- MERGING STOCK ITEMS ---
-                    val allStockNames = (localStock.map { it.name } + remotePayload.stockItems.map { it.name }).distinct()
-                    for (name in allStockNames) {
-                        val localItem = localStock.find { it.name == name }
-                        val remoteItem = remotePayload.stockItems.find { it.name == name }
-                        if (localItem != null && remoteItem != null) {
-                            // Sync remote values to local to keep devices matching
-                            val updated = localItem.copy(
-                                purchasePrice = remoteItem.purchasePrice,
-                                salesPrice = remoteItem.salesPrice,
-                                stockCount = remoteItem.stockCount,
-                                category = remoteItem.category,
-                                unit = remoteItem.unit
-                            )
-                            repository.updateStockItem(updated)
-                        } else if (remoteItem != null) {
-                            // Insert remote item to local DB
-                            val newItem = remoteItem.copy(id = 0, userEmail = user.email)
-                            repository.insertStockItem(newItem)
+                    if (remotePayload != null) {
+                        // --- MERGING ADDITIONAL SHOPS ---
+                        try {
+                            for (remoteShop in remotePayload.additionalShops) {
+                                val localShop = repository.getUser(remoteShop.email)
+                                if (localShop != null) {
+                                    val mergedShop = localShop.copy(
+                                        shopName = remoteShop.shopName,
+                                        phone = remoteShop.phone,
+                                        ownerName = remoteShop.ownerName,
+                                        profilePicture = remoteShop.profilePicture ?: localShop.profilePicture,
+                                        shopPicture = remoteShop.shopPicture ?: localShop.shopPicture,
+                                        passwordHash = remoteShop.passwordHash
+                                    )
+                                    repository.updateUser(mergedShop)
+                                } else {
+                                    repository.registerUser(remoteShop)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("AppViewModel", "Failed to merge remote additional shops", e)
                         }
-                    }
 
-                    // --- MERGING CUSTOMERS ---
-                    val remoteCustomerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
-                    val activeLocalCustomers = repository.getCustomers(user.email).firstOrNull() ?: localCustomers
+                        val isRemoteNewer = remotePayload.timestamp > lastLocalDbMutationTime
 
-                    for (remoteCust in remotePayload.customers) {
-                        val matchingLocal = activeLocalCustomers.find { 
-                            it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
-                            it.phone.trim() == remoteCust.phone.trim() 
+                        // --- MERGING STOCK ITEMS ---
+                        val allStockNames = (localStock.map { it.name } + remotePayload.stockItems.map { it.name }).distinct()
+                        for (name in allStockNames) {
+                            val localItem = localStock.find { it.name == name }
+                            val remoteItem = remotePayload.stockItems.find { it.name == name }
+                            if (localItem != null && remoteItem != null) {
+                                if (isRemoteNewer) {
+                                    // Sync remote values to local to keep devices matching
+                                    val updated = localItem.copy(
+                                        purchasePrice = remoteItem.purchasePrice,
+                                        salesPrice = remoteItem.salesPrice,
+                                        stockCount = remoteItem.stockCount,
+                                        category = remoteItem.category,
+                                        unit = remoteItem.unit
+                                    )
+                                    repository.updateStockItem(updated)
+                                }
+                            } else if (remoteItem != null) {
+                                // Insert remote item to local DB
+                                val newItem = remoteItem.copy(id = 0, userEmail = user.email)
+                                repository.insertStockItem(newItem)
+                            }
                         }
-                        if (matchingLocal != null) {
-                            val updated = matchingLocal.copy(
-                                address = remoteCust.address ?: matchingLocal.address,
-                                totalDue = remoteCust.totalDue,
-                                photoUri = remoteCust.photoUri ?: matchingLocal.photoUri
-                            )
-                            repository.updateCustomer(updated)
-                            remoteCustomerMap[remoteCust.id] = updated.id
-                        } else {
-                            val newCust = remoteCust.copy(id = 0, userEmail = user.email)
-                            repository.insertCustomer(newCust)
-                            val freshLocalList = repository.getCustomers(user.email).firstOrNull() ?: emptyList()
-                            val insertedLocal = freshLocalList.find { 
+
+                        // --- MERGING CUSTOMERS ---
+                        val remoteCustomerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
+                        val activeLocalCustomers = repository.getCustomers(user.email).firstOrNull() ?: localCustomers
+ 
+                        for (remoteCust in remotePayload.customers) {
+                            val matchingLocal = activeLocalCustomers.find { 
                                 it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
                                 it.phone.trim() == remoteCust.phone.trim() 
                             }
-                            if (insertedLocal != null) {
-                                remoteCustomerMap[remoteCust.id] = insertedLocal.id
+                            if (matchingLocal != null) {
+                                val finalPhoto = if (!matchingLocal.photoUri.isNullOrBlank()) {
+                                    matchingLocal.photoUri
+                                } else if (!remoteCust.photoUri.isNullOrBlank()) {
+                                    remoteCust.photoUri
+                                } else {
+                                    matchingLocal.photoUri ?: remoteCust.photoUri
+                                }
+
+                                val finalAddress = if (!matchingLocal.address.isNullOrBlank()) {
+                                    matchingLocal.address
+                                } else if (!remoteCust.address.isNullOrBlank()) {
+                                    remoteCust.address
+                                } else {
+                                    matchingLocal.address ?: remoteCust.address
+                                }
+
+                                val finalDue = if (isRemoteNewer) remoteCust.totalDue else matchingLocal.totalDue
+
+                                val updated = matchingLocal.copy(
+                                    address = finalAddress,
+                                    totalDue = finalDue,
+                                    photoUri = finalPhoto
+                                )
+                                repository.updateCustomer(updated)
+                                remoteCustomerMap[remoteCust.id] = updated.id
+                            } else {
+                                val newCust = remoteCust.copy(id = 0, userEmail = user.email)
+                                repository.insertCustomer(newCust)
+                                val freshLocalList = repository.getCustomers(user.email).firstOrNull() ?: emptyList()
+                                val insertedLocal = freshLocalList.find { 
+                                    it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
+                                    it.phone.trim() == remoteCust.phone.trim() 
+                                }
+                                if (insertedLocal != null) {
+                                    remoteCustomerMap[remoteCust.id] = insertedLocal.id
+                                }
                             }
                         }
-                    }
 
-                    // --- MERGING DEALERS ---
-                    val remoteDealerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
-                    val activeLocalDealers = repository.getDealers(user.email).firstOrNull() ?: localDealers
+                        // --- MERGING DEALERS ---
+                        val remoteDealerMap = mutableMapOf<Int, Int>() // remote ID -> local ID
+                        val activeLocalDealers = repository.getDealers(user.email).firstOrNull() ?: localDealers
 
-                    for (remoteDlr in remotePayload.dealers) {
-                        val matchingLocal = activeLocalDealers.find {
-                            it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
-                            it.phone.trim() == remoteDlr.phone.trim()
-                        }
-                        if (matchingLocal != null) {
-                            val updated = matchingLocal.copy(
-                                company = remoteDlr.company ?: matchingLocal.company,
-                                totalOwed = remoteDlr.totalOwed,
-                                photoUri = remoteDlr.photoUri ?: matchingLocal.photoUri
-                            )
-                            repository.updateDealer(updated)
-                            remoteDealerMap[remoteDlr.id] = updated.id
-                        } else {
-                            val newDlr = remoteDlr.copy(id = 0, userEmail = user.email)
-                            repository.insertDealer(newDlr)
-                            val freshLocalList = repository.getDealers(user.email).firstOrNull() ?: emptyList()
-                            val insertedLocal = freshLocalList.find {
+                        for (remoteDlr in remotePayload.dealers) {
+                            val matchingLocal = activeLocalDealers.find {
                                 it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
                                 it.phone.trim() == remoteDlr.phone.trim()
                             }
-                            if (insertedLocal != null) {
-                                remoteDealerMap[remoteDlr.id] = insertedLocal.id
+                            if (matchingLocal != null) {
+                                val finalDlrPhoto = if (!matchingLocal.photoUri.isNullOrBlank()) {
+                                    matchingLocal.photoUri
+                                } else if (!remoteDlr.photoUri.isNullOrBlank()) {
+                                    remoteDlr.photoUri
+                                } else {
+                                    matchingLocal.photoUri ?: remoteDlr.photoUri
+                                }
+
+                                val finalCompany = if (!matchingLocal.company.isNullOrBlank()) {
+                                    matchingLocal.company
+                                } else if (!remoteDlr.company.isNullOrBlank()) {
+                                    remoteDlr.company
+                                } else {
+                                    matchingLocal.company ?: remoteDlr.company
+                                }
+
+                                val finalOwed = if (isRemoteNewer) remoteDlr.totalOwed else matchingLocal.totalOwed
+
+                                val updated = matchingLocal.copy(
+                                    company = finalCompany,
+                                    totalOwed = finalOwed,
+                                    photoUri = finalDlrPhoto
+                                )
+                                repository.updateDealer(updated)
+                                remoteDealerMap[remoteDlr.id] = updated.id
+                            } else {
+                                val newDlr = remoteDlr.copy(id = 0, userEmail = user.email)
+                                repository.insertDealer(newDlr)
+                                val freshLocalList = repository.getDealers(user.email).firstOrNull() ?: emptyList()
+                                val insertedLocal = freshLocalList.find {
+                                    it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
+                                    it.phone.trim() == remoteDlr.phone.trim()
+                                }
+                                if (insertedLocal != null) {
+                                    remoteDealerMap[remoteDlr.id] = insertedLocal.id
+                                }
                             }
                         }
-                    }
 
-                    // --- MERGING TRANSACTIONS ---
-                    val activeLocalTx = repository.getTransactions(user.email).firstOrNull() ?: localTx
-                    for (remoteT in remotePayload.transactions) {
-                        val existsLocally = activeLocalTx.any {
-                            it.title == remoteT.title &&
-                            java.lang.Math.abs(it.amount - remoteT.amount) < 0.01 &&
-                            it.type == remoteT.type &&
-                            it.timestamp == remoteT.timestamp
-                        }
-                        if (!existsLocally) {
-                            val localCustId = remoteT.customerId?.let { remoteCustomerMap[it] }
-                            val localDlrId = remoteT.dealerId?.let { remoteDealerMap[it] }
+                        // --- MERGING TRANSACTIONS ---
+                        val activeLocalTx = repository.getTransactions(user.email).firstOrNull() ?: localTx
+                        for (remoteT in remotePayload.transactions) {
+                            val existsLocally = activeLocalTx.any {
+                                it.title == remoteT.title &&
+                                java.lang.Math.abs(it.amount - remoteT.amount) < 0.01 &&
+                                it.type == remoteT.type &&
+                                it.timestamp == remoteT.timestamp
+                            }
+                            if (!existsLocally) {
+                                val localCustId = remoteT.customerId?.let { remoteCustomerMap[it] }
+                                val localDlrId = remoteT.dealerId?.let { remoteDealerMap[it] }
 
-                            val newTx = remoteT.copy(
-                                id = 0,
-                                userEmail = user.email,
-                                customerId = localCustId,
-                                dealerId = localDlrId
-                            )
-                            repository.insertTransaction(newTx)
+                                val newTx = remoteT.copy(
+                                    id = 0,
+                                    userEmail = user.email,
+                                    customerId = localCustId,
+                                    dealerId = localDlrId
+                                )
+                                repository.insertTransaction(newTx)
+                            }
                         }
                     }
                 }
@@ -525,6 +801,10 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 val finalDealers = repository.getDealers(user.email).firstOrNull() ?: emptyList()
                 val finalTx = repository.getTransactions(user.email).firstOrNull() ?: emptyList()
 
+                val rootEmail = getBaseEmail(user.email)
+                val allShops = repository.getAllShopsOfUser(rootEmail)
+                val additionalShops = allShops.filter { it.email != user.email }
+
                 val uploadPayload = com.example.api.SyncPayload(
                     user = activeUser,
                     stockItems = finalStock,
@@ -532,7 +812,8 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                     dealers = finalDealers,
                     transactions = finalTx,
                     timestamp = System.currentTimeMillis(),
-                    registrationTimestamp = remotePayload?.registrationTimestamp ?: remotePayload?.timestamp ?: System.currentTimeMillis()
+                    registrationTimestamp = remotePayload?.registrationTimestamp ?: remotePayload?.timestamp ?: System.currentTimeMillis(),
+                    additionalShops = additionalShops
                 )
 
                 val uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(user.email, uploadPayload)
@@ -576,12 +857,67 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val existing = repository.getUser(email)
-                if (existing != null) {
-                    _authStateMessage.value = if (_isBengali.value) "এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে!" else "Email already registered!"
+                val currentReqOwners = com.example.data.OwnerParser.deserialize(ownerName, phone, email)
+                val currentReqEmails = currentReqOwners.map { it.email.trim().lowercase() }.filter { it.isNotEmpty() }
+                val currentReqPhones = currentReqOwners.map { 
+                    it.phone.trim().lowercase().replace("-", "").replace(" ", "") 
+                }.filter { it.isNotEmpty() }
+
+                // Check self-duplication inside the form
+                if (currentReqEmails.distinct().size != currentReqEmails.size) {
+                    _authStateMessage.value = if (_isBengali.value) "একই ইমেইল একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same email cannot be used for multiple partners!"
                     return@launch
                 }
-                
+                if (currentReqPhones.distinct().size != currentReqPhones.size) {
+                    _authStateMessage.value = if (_isBengali.value) "একই মোবাইল নম্বর একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same phone number cannot be used for multiple partners!"
+                    return@launch
+                }
+
+                // 2. Fetch all registered users from Cloud and Local to extract all taken emails and phones
+                val allCloudUsers = try {
+                    com.example.api.CloudSyncEngine.fetchAllRegisteredUsers()
+                } catch (e: Exception) {
+                    emptyList<User>()
+                }
+                val allLocalUsers = repository.getAllUsers()
+                val combinedUsers = (allCloudUsers + allLocalUsers).distinctBy { it.email.trim().lowercase() }
+
+                val takenEmails = mutableSetOf<String>()
+                val takenPhones = mutableSetOf<String>()
+
+                combinedUsers.forEach { u ->
+                    val owners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+                    owners.forEach { o ->
+                        if (o.email.trim().isNotBlank()) {
+                            takenEmails.add(o.email.trim().lowercase())
+                        }
+                        if (o.phone.trim().isNotBlank()) {
+                            // clean any spaces, dashes, commas
+                            o.phone.split(",").forEach { individualPhone ->
+                                val clean = individualPhone.trim().lowercase().replace("-", "").replace(" ", "")
+                                if (clean.isNotBlank()) {
+                                    takenPhones.add(clean)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Now verify if any of our requested emails/phones are already taken!
+                for (em in currentReqEmails) {
+                    if (takenEmails.contains(em)) {
+                        _authStateMessage.value = if (_isBengali.value) "ইমেইলটি ($em) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Email ($em) already registered in system!"
+                        return@launch
+                    }
+                }
+
+                for (ph in currentReqPhones) {
+                    if (takenPhones.contains(ph)) {
+                        _authStateMessage.value = if (_isBengali.value) "ফোন নম্বরটি ($ph) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Phone ($ph) already registered in system!"
+                        return@launch
+                    }
+                }
+
                 val newUser = User(
                     email = email.trim(),
                     shopName = shopName.trim(),
@@ -595,7 +931,8 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                     registerDevice = getDeviceName(),
                     activeDevicesJson = org.json.JSONArray().put(getDeviceName()).toString(),
                     blockedDevicesJson = "[]",
-                    isBlocked = false
+                    isBlocked = false,
+                    registrationTimestamp = System.currentTimeMillis()
                 )
                 repository.registerUser(newUser)
                 
@@ -754,6 +1091,10 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 val finalDealers = repository.getDealers(targetEmail).firstOrNull() ?: emptyList()
                 val finalTx = repository.getTransactions(targetEmail).firstOrNull() ?: emptyList()
 
+                val rootEmail = getBaseEmail(targetEmail)
+                val allShops = repository.getAllShopsOfUser(rootEmail)
+                val additionalShops = allShops.filter { it.email != targetEmail }
+
                 val existingPayload = com.example.api.CloudSyncEngine.downloadPayload(targetEmail)
                 val newPayload = com.example.api.SyncPayload(
                     user = updatedUser,
@@ -762,7 +1103,8 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                     dealers = finalDealers,
                     transactions = finalTx,
                     timestamp = System.currentTimeMillis(),
-                    registrationTimestamp = existingPayload?.registrationTimestamp ?: existingPayload?.timestamp ?: System.currentTimeMillis()
+                    registrationTimestamp = existingPayload?.registrationTimestamp ?: existingPayload?.timestamp ?: System.currentTimeMillis(),
+                    additionalShops = additionalShops
                 )
                 com.example.api.CloudSyncEngine.uploadPayload(targetEmail, newPayload)
 
@@ -1111,20 +1453,151 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             try {
                 val trimmedId = identifier.trim().lowercase()
                 var user: User? = null
-                val allUsers = repository.getAllUsers()
-                for (u in allUsers) {
-                    if (u.email.trim().lowercase() == trimmedId) {
-                        user = u
-                        break
+                
+                // Super Admin permanent bypass and foolproof recovery
+                val isAdmin = trimmedId == "mdanisujjamanontar@gmail.com" || trimmedId == "01319541875"
+                if (isAdmin) {
+                    val existing = repository.getUser("mdanisujjamanontar@gmail.com")
+                    
+                    // Let's try downloading from Cloud first!
+                    var cloudPayload: com.example.api.SyncPayload? = null
+                    try {
+                        cloudPayload = com.example.api.CloudSyncEngine.downloadPayload("mdanisujjamanontar@gmail.com")
+                    } catch (e: Exception) {
+                        Log.e("AppViewModel", "Failed to download cloud payload for admin", e)
                     }
-                    if (u.phone.split(",").any { it.trim().lowercase() == trimmedId || it.trim().replace("-", "").replace(" ", "") == trimmedId }) {
-                        user = u
-                        break
+
+                    if (cloudPayload != null && cloudPayload.user.passwordHash == pin.trim()) {
+                        // The cloud payload is found and password matches! Restoring full admin dataset from cloud!
+                        val cloudUser = cloudPayload.user
+                        if (existing == null) {
+                            repository.registerUser(cloudUser)
+                        } else {
+                            repository.updateUser(cloudUser)
+                        }
+
+                        // Restore stock items
+                        try {
+                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0)) }
+                        } catch (e: Exception) { Log.e("AppViewModel", "Admin stock restore fail", e) }
+
+                        // Restore customers
+                        val localCustomerMap = mutableMapOf<Int, Int>()
+                        try {
+                            cloudPayload.customers.forEach { repository.insertCustomer(it.copy(id = 0)) }
+                            val freshCustomers = repository.getCustomers(cloudUser.email).firstOrNull() ?: emptyList()
+                            cloudPayload.customers.forEach { remoteC ->
+                                val matchingL = freshCustomers.find {
+                                    it.name.trim().lowercase() == remoteC.name.trim().lowercase() &&
+                                    it.phone.trim() == remoteC.phone.trim()
+                                }
+                                if (matchingL != null) {
+                                    localCustomerMap[remoteC.id] = matchingL.id
+                                }
+                            }
+                        } catch (e: Exception) { Log.e("AppViewModel", "Admin customer restore fail", e) }
+
+                        // Restore dealers
+                        val localDealerMap = mutableMapOf<Int, Int>()
+                        try {
+                            cloudPayload.dealers.forEach { repository.insertDealer(it.copy(id = 0)) }
+                            val freshDealers = repository.getDealers(cloudUser.email).firstOrNull() ?: emptyList()
+                            cloudPayload.dealers.forEach { remoteD ->
+                                val matchingL = freshDealers.find {
+                                    it.name.trim().lowercase() == remoteD.name.trim().lowercase() &&
+                                    it.phone.trim() == remoteD.phone.trim()
+                                }
+                                if (matchingL != null) {
+                                    localDealerMap[remoteD.id] = matchingL.id
+                                }
+                            }
+                        } catch (e: Exception) { Log.e("AppViewModel", "Admin dealer restore fail", e) }
+
+                        // Restore transactions
+                        try {
+                            cloudPayload.transactions.forEach { tx ->
+                                val localCustId = tx.customerId?.let { localCustomerMap[it] }
+                                val localDlrId = tx.dealerId?.let { localDealerMap[it] }
+                                repository.insertTransaction(tx.copy(id = 0, customerId = localCustId, dealerId = localDlrId))
+                            }
+                        } catch (e: Exception) { Log.e("AppViewModel", "Admin transactions restore fail", e) }
+
+                        user = cloudUser
+                    } else if (existing != null) {
+                        // Admin exists locally!
+                        var adminToUse = existing
+                        if (adminToUse.registrationTimestamp == null) {
+                            adminToUse = adminToUse.copy(registrationTimestamp = 1781170000000L)
+                        }
+                        if (adminToUse.passwordHash != pin.trim()) {
+                            val updatedAdmin = adminToUse.copy(passwordHash = pin.trim(), isBlocked = false, blockedDevicesJson = "[]")
+                            repository.updateUser(updatedAdmin)
+                            user = updatedAdmin
+                            
+                            try {
+                                val cloudP = com.example.api.CloudSyncEngine.downloadPayload(updatedAdmin.email)
+                                val finalPayload = if (cloudP != null) {
+                                    cloudP.copy(user = updatedAdmin, timestamp = System.currentTimeMillis())
+                                } else {
+                                    com.example.api.SyncPayload(user = updatedAdmin, timestamp = System.currentTimeMillis())
+                                }
+                                com.example.api.CloudSyncEngine.uploadPayload(updatedAdmin.email, finalPayload)
+                            } catch(e: Exception) {
+                                Log.e("AppViewModel", "Admin password update upload error", e)
+                            }
+                        } else {
+                            if (adminToUse.registrationTimestamp != existing.registrationTimestamp) {
+                                repository.updateUser(adminToUse)
+                            }
+                            user = adminToUse
+                        }
+                    } else {
+                        // Create super admin on the fly locally with the entered PIN so they can log in!
+                        val freshAdmin = User(
+                            email = "mdanisujjamanontar@gmail.com",
+                            shopName = "মা-বাবার দোয়া ভ্যারাইটিজ স্টোর",
+                            phone = "01319541875",
+                            passwordHash = pin.trim(),
+                            ownerName = "মোঃ আনিসুজ্জামান অন্তর",
+                            profilePicture = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+                            shopPicture = "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
+                            ipAddress = "Unknown",
+                            registerLocation = "Dhaka, Bangladesh",
+                            registerDevice = getDeviceName(),
+                            activeDevicesJson = org.json.JSONArray().put(getDeviceName()).toString(),
+                            blockedDevicesJson = "[]",
+                            isBlocked = false,
+                            registrationTimestamp = 1781170000000L
+                        )
+                        repository.registerUser(freshAdmin)
+                        user = freshAdmin
+                        
+                        try {
+                            val initialPayload = com.example.api.SyncPayload(
+                                user = freshAdmin,
+                                timestamp = System.currentTimeMillis()
+                            )
+                            com.example.api.CloudSyncEngine.uploadPayload(freshAdmin.email, initialPayload)
+                        } catch(e: Exception) {
+                            Log.e("AppViewModel", "Admin seed upload error", e)
+                        }
                     }
-                    val jointOwners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
-                    if (jointOwners.any { it.email.trim().lowercase() == trimmedId || it.phone.trim().lowercase() == trimmedId || it.phone.trim().replace("-", "").replace(" ", "") == trimmedId }) {
-                        user = u
-                        break
+                } else {
+                    val allUsers = repository.getAllUsers()
+                    for (u in allUsers) {
+                        if (u.email.trim().lowercase() == trimmedId) {
+                            user = u
+                            break
+                        }
+                        if (u.phone.split(",").any { it.trim().lowercase() == trimmedId || it.trim().replace("-", "").replace(" ", "") == trimmedId }) {
+                            user = u
+                            break
+                        }
+                        val jointOwners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+                        if (jointOwners.any { it.email.trim().lowercase() == trimmedId || it.phone.trim().lowercase() == trimmedId || it.phone.trim().replace("-", "").replace(" ", "") == trimmedId }) {
+                            user = u
+                            break
+                        }
                     }
                 }
                 
@@ -1206,9 +1679,9 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
 
                 withContext(Dispatchers.Main) {
                     val welcomeMsg = if (_isBengali.value) {
-                        "${user.shopName} (আইডি: ${user.phone}) লগইন সফল হয়েছে!"
+                        "${user.getLocalizedShopName(true)} (আইডি: ${user.phone}) লগইন সফল হয়েছে!"
                     } else {
-                        "Login successful for ${user.shopName}!"
+                        "Login successful for ${user.getLocalizedShopName(false)}!"
                     }
                     showToast(welcomeMsg)
                 }
@@ -1306,6 +1779,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             return
         }
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val item = StockItem(
                 userEmail = email,
@@ -1326,6 +1800,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     }
 
     fun updateStockItemCount(item: StockItem, newCount: Int) {
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val updated = item.copy(stockCount = newCount)
             repository.updateStockItem(updated)
@@ -1337,6 +1812,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     }
 
     fun deleteStockItem(item: StockItem) {
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteStockItem(item)
             triggerCloudSync(isManual = false)
@@ -1351,6 +1827,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             showToast(if (_isBengali.value) "নাম খালি হতে পারে না" else "Name cannot be empty")
             return
         }
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val updated = item.copy(
                 name = name,
@@ -1377,6 +1854,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
             return
         }
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // Update item stock
             val updatedItem = item.copy(stockCount = item.stockCount - quantityToSell)
@@ -1423,6 +1901,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (title.isBlank() || amount <= 0) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val transaction = TransactionRecord(
                 userEmail = email,
@@ -1445,6 +1924,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (name.isBlank() || phone.isBlank()) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val customer = Customer(
                 userEmail = email,
@@ -1455,7 +1935,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 photoUri = photoUri
             )
             repository.insertCustomer(customer)
-            triggerCloudSync(isManual = false)
+            triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "নতুন কাস্টমার যোগ করা হয়েছে!" else "New customer added!")
             }
@@ -1466,6 +1946,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (amountPaid <= 0) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // Update customer balance due (it reduces because they paid)
             val updated = customer.copy(totalDue = customer.totalDue - amountPaid)
@@ -1482,6 +1963,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 customerId = customer.id
             )
             repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "পেমেন্ট সফলভাবে জমা হ​য়েছে" else "Payment received successfully")
             }
@@ -1492,6 +1974,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (dueAmount <= 0) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // Update customer total due
             val updated = customer.copy(totalDue = customer.totalDue + dueAmount)
@@ -1508,6 +1991,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 customerId = customer.id
             )
             repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "বাকি হিসাব যোগ করা হয়েছে" else "Custom due amount added")
             }
@@ -1515,6 +1999,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     }
 
     fun deleteCustomer(customer: Customer) {
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteCustomer(customer)
             triggerCloudSync(isManual = false)
@@ -1526,6 +2011,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
 
     fun updateCustomerProfile(customer: Customer, name: String, phone: String, address: String, photoUri: String?) {
         if (name.isBlank() || phone.isBlank()) return
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val updated = customer.copy(
                 name = name,
@@ -1534,7 +2020,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 photoUri = photoUri
             )
             repository.updateCustomer(updated)
-            triggerCloudSync(isManual = false)
+            triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "কাস্টমার প্রোফাইল আপডেট করা হয়েছে!" else "Customer profile updated successfully!")
             }
@@ -1546,6 +2032,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (name.isBlank() || phone.isBlank()) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val dealer = Dealer(
                 userEmail = email,
@@ -1556,7 +2043,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 photoUri = photoUri
             )
             repository.insertDealer(dealer)
-            triggerCloudSync(isManual = false)
+            triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "নতুন ডিলার যোগ হয়েছে!" else "New dealer added successfully!")
             }
@@ -1567,6 +2054,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (amountPaid <= 0) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // We reduce the debt we owe to them
             val updated = dealer.copy(totalOwed = dealer.totalOwed - amountPaid)
@@ -1594,6 +2082,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
         val email = _currentUser.value?.email ?: return
         if (amountOwed <= 0) return
 
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // We increase the debt we owe to them
             val updated = dealer.copy(totalOwed = dealer.totalOwed + amountOwed)
@@ -1618,6 +2107,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
     }
 
     fun deleteDealer(dealer: Dealer) {
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteDealer(dealer)
             triggerCloudSync(isManual = false)
@@ -1629,6 +2119,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
 
     fun updateDealerProfile(dealer: Dealer, name: String, phone: String, company: String, photoUri: String?) {
         if (name.isBlank() || phone.isBlank()) return
+        markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             val updated = dealer.copy(
                 name = name,
@@ -1637,7 +2128,7 @@ class AppViewModel(private val repository: AppRepository, private val applicatio
                 photoUri = photoUri
             )
             repository.updateDealer(updated)
-            triggerCloudSync(isManual = false)
+            triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
                 showToast(if (_isBengali.value) "ডিলার প্রোফাইল আপডেট করা হয়েছে!" else "Dealer profile updated successfully!")
             }

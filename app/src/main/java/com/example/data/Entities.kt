@@ -18,8 +18,25 @@ data class User(
     val registerDevice: String? = null,
     val activeDevicesJson: String? = null,
     val blockedDevicesJson: String? = null,
-    val isBlocked: Boolean = false
-) : Serializable
+    val isBlocked: Boolean = false,
+    val registrationTimestamp: Long? = null
+) : Serializable {
+    fun getLocalizedShopName(isBn: Boolean): String {
+        val emailClean = email.trim().lowercase()
+        if (emailClean == "mdanisujjamanontar@gmail.com" || phone.trim() == "01319541875") {
+            return if (isBn) "মা-বাবার দোয়া ভ্যারাইটিজ স্টোর" else "Maa-Babar Doa Varieties Store"
+        }
+        return shopName
+    }
+
+    fun getLocalizedOwnerName(isBn: Boolean): String {
+        val emailClean = email.trim().lowercase()
+        if (emailClean == "mdanisujjamanontar@gmail.com" || phone.trim() == "01319541875") {
+            return if (isBn) "মোঃ আনিসুজ্জামান অন্তর" else "MD ANISUJJAMAN ONTAR"
+        }
+        return ownerName ?: ""
+    }
+}
 
 @Entity(tableName = "stock_items")
 data class StockItem(

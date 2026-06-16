@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -92,6 +94,26 @@ fun StockManagerScreen(viewModel: AppViewModel) {
     ) { uri: Uri? ->
         if (uri != null) {
             viewModel.uriToBase64(context, uri)?.let { base64 ->
+                editItemPhotoUri = base64
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
+                stockPhotoUri = base64
+            }
+        }
+    }
+
+    val editCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            viewModel.bitmapToBase64(bitmap)?.let { base64 ->
                 editItemPhotoUri = base64
             }
         }
@@ -417,7 +439,7 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                             ) {
                                 if (stockPhotoUri.isNotEmpty()) {
                                     coil.compose.AsyncImage(
-                                        model = stockPhotoUri,
+                                        model = rememberImageModel(stockPhotoUri),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .size(48.dp)
@@ -458,6 +480,33 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                                     modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = "Choose Photo", tint = colors.primary)
+                                }
+
+                                IconButton(
+                                    onClick = { cameraLauncher.launch(null) },
+                                    modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp, 14.dp)
+                                                .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .border(1.8.dp, colors.primary, CircleShape)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp, 2.dp)
+                                                .align(Alignment.TopCenter)
+                                                .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -684,7 +733,7 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                             ) {
                                 if (editItemPhotoUri.isNotEmpty()) {
                                     coil.compose.AsyncImage(
-                                        model = editItemPhotoUri,
+                                        model = rememberImageModel(editItemPhotoUri),
                                         contentDescription = null,
                                         modifier = Modifier
                                             .size(48.dp)
@@ -721,6 +770,33 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                                     modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = "Choose Photo", tint = colors.primary)
+                                }
+
+                                IconButton(
+                                    onClick = { editCameraLauncher.launch(null) },
+                                    modifier = Modifier.background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp, 14.dp)
+                                                .border(1.8.dp, colors.primary, RoundedCornerShape(3.dp))
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .border(1.8.dp, colors.primary, CircleShape)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp, 2.dp)
+                                                .align(Alignment.TopCenter)
+                                                .background(colors.primary, RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -795,7 +871,7 @@ fun StockItemCard(
                 // Left - Thumbnail (if loaded)
                 if (!item.imageResName.isNullOrEmpty()) {
                     coil.compose.AsyncImage(
-                        model = item.imageResName,
+                        model = rememberImageModel(item.imageResName),
                         contentDescription = null,
                         modifier = Modifier
                             .size(52.dp)
