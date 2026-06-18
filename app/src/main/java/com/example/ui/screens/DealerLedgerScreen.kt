@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -505,7 +506,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     onDismissRequest = { showAddDealerDialog = false },
                     title = { Text(Translator.get("add_dealer", isBn), fontWeight = FontWeight.Bold) },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             Button(
                                 onClick = {
                                     contactPickTarget = "ADD"
@@ -682,7 +683,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     // Gallery Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { dealerPhotoLauncher.launch("image/*") },
@@ -699,7 +700,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     // Camera Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { cameraLauncher.launch(null) },
@@ -740,7 +741,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     if (isCustomSelected) {
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
                                                 .clickable { /* Already selected */ }
@@ -771,7 +772,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                         val isSelected = dealerPhotoUri == avatarUrl
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
                                                 .clickable { dealerPhotoUri = avatarUrl }
@@ -838,7 +839,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     onDismissRequest = { dealerToEdit = null },
                     title = { Text(if (isBn) "ডিলারের প্রোফাইল সম্পাদন" else "Edit Supplier Profile", fontWeight = FontWeight.Bold) },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             Button(
                                 onClick = {
                                     contactPickTarget = "EDIT"
@@ -972,7 +973,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     // Gallery Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { editDealerPhotoLauncher.launch("image/*") },
@@ -989,7 +990,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     // Camera Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { editCameraLauncher.launch(null) },
@@ -1030,7 +1031,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     if (isCustomSelected) {
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
                                                 .clickable { /* Already selected */ }
@@ -1061,7 +1062,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                         val isSelected = editDealerPhotoUri == avatarUrl
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
                                                 .clickable { editDealerPhotoUri = avatarUrl }

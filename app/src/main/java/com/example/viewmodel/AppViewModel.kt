@@ -13,6 +13,7 @@ import com.example.api.GeminiRequest
 import com.example.api.GenerationConfig
 import com.example.api.Part
 import com.example.data.*
+import com.example.ui.screens.resolveBestPhoto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -67,7 +68,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             
             // Check original dimensions
             var inSampleSize = 1
-            val maxDimension = 150
+            val maxDimension = 100
             if (options.outHeight > maxDimension || options.outWidth > maxDimension) {
                 val halfHeight = options.outHeight / 2
                 val halfWidth = options.outWidth / 2
@@ -91,8 +92,8 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             
             if (bitmap == null) return null
             
-            // Resize precisely to standard 120 size (nice and neat, around 2-3KB to prevent payload limits)
-            val targetSize = 120
+            // Resize precisely to standard 90 size (extra optimized, around 1KB to fit kvdb limits seamlessly)
+            val targetSize = 90
             val scaledBitmap = if (bitmap.width > targetSize || bitmap.height > targetSize) {
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                 val (newWidth, newHeight) = if (ratio > 1f) {
@@ -105,9 +106,9 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 bitmap
             }
             
-            // Compress deeply
+            // Compress extra deeply
             val outputStream = java.io.ByteArrayOutputStream()
-            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, outputStream)
             val imageBytes = outputStream.toByteArray()
             
             // Recycle both to free memory immediately
@@ -126,7 +127,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
     fun bitmapToBase64(bitmap: android.graphics.Bitmap): String? {
         return try {
-            val targetSize = 120
+            val targetSize = 90
             val scaledBitmap = if (bitmap.width > targetSize || bitmap.height > targetSize) {
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                 val (newWidth, newHeight) = if (ratio > 1f) {
@@ -140,7 +141,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             }
             
             val outputStream = java.io.ByteArrayOutputStream()
-            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, outputStream)
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, outputStream)
             val imageBytes = outputStream.toByteArray()
             
             if (bitmap != scaledBitmap) {
@@ -191,6 +192,70 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     // Session user
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
+    private val _otaConfig = MutableStateFlow(com.example.data.OtaConfig())
+    val otaConfig: StateFlow<com.example.data.OtaConfig> = _otaConfig.asStateFlow()
+
+    private val _isForceUpdateBypassed = MutableStateFlow(false)
+    val isForceUpdateBypassed: StateFlow<Boolean> = _isForceUpdateBypassed.asStateFlow()
+
+    fun bypassForceUpdate() {
+        _isForceUpdateBypassed.value = true
+    }
+
+    fun fetchGlobalOtaConfig() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonStr = com.example.api.CloudSyncEngine.downloadIndividualImage("app_ota_config_global")
+                if (!jsonStr.isNullOrBlank()) {
+                    val jo = org.json.JSONObject(jsonStr)
+                    val parsed = com.example.data.OtaConfig(
+                        latestVersionCode = jo.optInt("latestVersionCode", 1),
+                        latestVersionName = jo.optString("latestVersionName", "1.0"),
+                        updateDownloadUrl = jo.optString("updateDownloadUrl", "https://ais-pre-wolkhdsxahnvgjlshvncw2-122144077257.asia-southeast1.run.app"),
+                        bengaliMessage = jo.optString("bengaliMessage", "আপনাদের সকল ডাটা ও ইমেজ লাইফটাইম ব্যাকআপ সম্পন্ন করা হয়েছে!"),
+                        englishMessage = jo.optString("englishMessage", "All your data and images are successfully backed up for lifetime!"),
+                        forceUpdateEnabled = jo.optBoolean("forceUpdateEnabled", false),
+                        freePremiumActive = jo.optBoolean("freePremiumActive", true)
+                    )
+                    withContext(Dispatchers.Main) {
+                        _otaConfig.value = parsed
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Failed to fetch global OTA config", e)
+            }
+        }
+    }
+
+    fun updateGlobalOtaConfig(config: com.example.data.OtaConfig) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jo = org.json.JSONObject()
+                jo.put("latestVersionCode", config.latestVersionCode)
+                jo.put("latestVersionName", config.latestVersionName)
+                jo.put("updateDownloadUrl", config.updateDownloadUrl)
+                jo.put("bengaliMessage", config.bengaliMessage)
+                jo.put("englishMessage", config.englishMessage)
+                jo.put("forceUpdateEnabled", config.forceUpdateEnabled)
+                jo.put("freePremiumActive", config.freePremiumActive)
+                
+                val success = com.example.api.CloudSyncEngine.uploadIndividualImage("app_ota_config_global", jo.toString())
+                if (success) {
+                    withContext(Dispatchers.Main) {
+                        _otaConfig.value = config
+                        showToast(if (_isBengali.value) "গ্লোবাল আপডেট সেটিং ক্লাউডে সফলভাবে সেভ হয়েছে!" else "Global update settings successfully saved to cloud!")
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        showToast(if (_isBengali.value) "সেভ করা যায়নি, দয়া করে আবার চেষ্টা করুন।" else "Failed to save settings, please try again.")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Failed to upload global OTA config", e)
+            }
+        }
+    }
 
     private var lastProfileUpdateTime = 0L
     private var lastLocalDbMutationTime = 0L
@@ -443,12 +508,38 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     }
 
     init {
+        fetchGlobalOtaConfig()
+        // Session Auto-Login check on startup
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedEmail = prefs.getString("session_user_email", null)
+            if (!savedEmail.isNullOrBlank()) {
+                val userObj = repository.getUser(savedEmail)
+                if (userObj != null) {
+                    withContext(Dispatchers.Main) {
+                        _currentUser.value = userObj
+                        _currentScreen.value = "DASHBOARD"
+                    }
+                } else {
+                    prefs.edit().remove("session_user_email").remove("session_last_active").apply()
+                }
+            }
+        }
+
         viewModelScope.launch {
             _currentUser.collect { user ->
                 if (user != null) {
+                    prefs.edit()
+                        .putString("session_user_email", user.email)
+                        .putLong("session_last_active", System.currentTimeMillis())
+                        .apply()
                     loadShopsForActiveUser()
                     updateActiveUserDynamicIpAndDevice()
                     triggerCloudSync(isManual = false)
+                } else {
+                    prefs.edit()
+                        .remove("session_user_email")
+                        .remove("session_last_active")
+                        .apply()
                 }
             }
         }
@@ -457,6 +548,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         viewModelScope.launch {
             while (true) {
                 kotlinx.coroutines.delay(30000)
+                fetchGlobalOtaConfig()
                 if (_currentUser.value != null && !_isCloudSyncing.value) {
                     try {
                         triggerCloudSync(isManual = false)
@@ -541,6 +633,113 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             capMod
         } else {
             "$capMan $capMod"
+        }
+    }
+
+    private fun uploadImageIfBase64(ownerEmail: String, imageStr: String?, extraSeed: String): String? {
+        if (imageStr.isNullOrBlank()) return null
+        
+        // If it is already a remote reference, just return it
+        if (imageStr.startsWith("remote_ref:")) {
+            return imageStr
+        }
+        
+        // Check if it is a real base64 image (either has prefix data: or length > 100 without standard scheme prefix)
+        val isBase64 = imageStr.startsWith("data:") || (imageStr.length > 100 && !imageStr.startsWith("http") && !imageStr.startsWith("content://") && !imageStr.startsWith("file://") && !imageStr.startsWith("/") && !imageStr.startsWith("android.resource://"))
+        
+        if (!isBase64) return imageStr
+        
+        val sanitizedEmail = ownerEmail.lowercase().trim().replace("@", "_at_").replace(".", "_dot_").filter { it.isLetterOrDigit() || it == '_' }
+        val absHash = java.lang.Math.abs(imageStr.hashCode())
+        val imageKey = "img_${sanitizedEmail}_${extraSeed}_h${absHash}_len${imageStr.length}".lowercase().filter { it.isLetterOrDigit() || it == '_' }
+        
+        return try {
+            val success = kotlinx.coroutines.runBlocking {
+                com.example.api.CloudSyncEngine.uploadIndividualImage(imageKey, imageStr)
+            }
+            if (success) {
+                "remote_ref:$imageKey"
+            } else {
+                imageStr
+            }
+        } catch (e: Exception) {
+            Log.e("AppViewModel", "Failed to upload image $imageKey", e)
+            imageStr
+        }
+    }
+
+    fun downloadRemoteImagesInBackground(userEmail: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. User Profile and Shop Pictures
+                val user = repository.getUser(userEmail)
+                if (user != null) {
+                    var updatedUser = user
+                    var changed = false
+                    if (user.profilePicture?.startsWith("remote_ref:") == true) {
+                        val key = user.profilePicture.substringAfter("remote_ref:")
+                        val base64 = com.example.api.CloudSyncEngine.downloadIndividualImage(key)
+                        if (!base64.isNullOrBlank()) {
+                            updatedUser = updatedUser.copy(profilePicture = base64)
+                            changed = true
+                        }
+                    }
+                    if (user.shopPicture?.startsWith("remote_ref:") == true) {
+                        val key = user.shopPicture.substringAfter("remote_ref:")
+                        val base64 = com.example.api.CloudSyncEngine.downloadIndividualImage(key)
+                        if (!base64.isNullOrBlank()) {
+                            updatedUser = updatedUser.copy(shopPicture = base64)
+                            changed = true
+                        }
+                    }
+                    if (changed) {
+                        repository.updateUser(updatedUser)
+                        if (_currentUser.value?.email == userEmail) {
+                            withContext(Dispatchers.Main) {
+                                _currentUser.value = updatedUser
+                            }
+                        }
+                    }
+                }
+
+                // 2. Customers Profile Pictures
+                val customersList = repository.getCustomers(userEmail).firstOrNull() ?: emptyList()
+                for (cust in customersList) {
+                    if (cust.photoUri?.startsWith("remote_ref:") == true) {
+                        val key = cust.photoUri.substringAfter("remote_ref:")
+                        val base64 = com.example.api.CloudSyncEngine.downloadIndividualImage(key)
+                        if (!base64.isNullOrBlank()) {
+                            repository.updateCustomer(cust.copy(photoUri = base64))
+                        }
+                    }
+                }
+
+                // 3. Dealers Profile Pictures
+                val dealersList = repository.getDealers(userEmail).firstOrNull() ?: emptyList()
+                for (dlr in dealersList) {
+                    if (dlr.photoUri?.startsWith("remote_ref:") == true) {
+                        val key = dlr.photoUri.substringAfter("remote_ref:")
+                        val base64 = com.example.api.CloudSyncEngine.downloadIndividualImage(key)
+                        if (!base64.isNullOrBlank()) {
+                            repository.updateDealer(dlr.copy(photoUri = base64))
+                        }
+                    }
+                }
+
+                // 4. Stock Item Pictures
+                val stocksList = repository.getStockItems(userEmail).firstOrNull() ?: emptyList()
+                for (stock in stocksList) {
+                    if (stock.imageResName?.startsWith("remote_ref:") == true) {
+                        val key = stock.imageResName.substringAfter("remote_ref:")
+                        val base64 = com.example.api.CloudSyncEngine.downloadIndividualImage(key)
+                        if (!base64.isNullOrBlank()) {
+                            repository.updateStockItem(stock.copy(imageResName = base64))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Failed to download remote images in background", e)
+            }
         }
     }
 
@@ -633,8 +832,8 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                         shopName = remoteShop.shopName,
                                         phone = remoteShop.phone,
                                         ownerName = remoteShop.ownerName,
-                                        profilePicture = remoteShop.profilePicture ?: localShop.profilePicture,
-                                        shopPicture = remoteShop.shopPicture ?: localShop.shopPicture,
+                                        profilePicture = resolveBestPhoto(localShop.profilePicture, remoteShop.profilePicture),
+                                        shopPicture = resolveBestPhoto(localShop.shopPicture, remoteShop.shopPicture),
                                         passwordHash = remoteShop.passwordHash
                                     )
                                     repository.updateUser(mergedShop)
@@ -682,13 +881,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 it.phone.trim() == remoteCust.phone.trim() 
                             }
                             if (matchingLocal != null) {
-                                val finalPhoto = if (!matchingLocal.photoUri.isNullOrBlank()) {
-                                    matchingLocal.photoUri
-                                } else if (!remoteCust.photoUri.isNullOrBlank()) {
-                                    remoteCust.photoUri
-                                } else {
-                                    matchingLocal.photoUri ?: remoteCust.photoUri
-                                }
+                                val finalPhoto = resolveBestPhoto(matchingLocal.photoUri, remoteCust.photoUri)
 
                                 val finalAddress = if (!matchingLocal.address.isNullOrBlank()) {
                                     matchingLocal.address
@@ -731,13 +924,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 it.phone.trim() == remoteDlr.phone.trim()
                             }
                             if (matchingLocal != null) {
-                                val finalDlrPhoto = if (!matchingLocal.photoUri.isNullOrBlank()) {
-                                    matchingLocal.photoUri
-                                } else if (!remoteDlr.photoUri.isNullOrBlank()) {
-                                    remoteDlr.photoUri
-                                } else {
-                                    matchingLocal.photoUri ?: remoteDlr.photoUri
-                                }
+                                val finalDlrPhoto = resolveBestPhoto(matchingLocal.photoUri, remoteDlr.photoUri)
 
                                 val finalCompany = if (!matchingLocal.company.isNullOrBlank()) {
                                     matchingLocal.company
@@ -792,10 +979,13 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 repository.insertTransaction(newTx)
                             }
                         }
+
+                        // Fire off background worker to download actual base64 image strings for remote references
+                        downloadRemoteImagesInBackground(user.email)
                     }
                 }
 
-                // 3. Upload latest consolidated merged local database back to Cloud
+                // 3. Preprocess and Upload raw Base64 images to separate isolated keys before uploading the main payload
                 val finalStock = repository.getStockItems(user.email).firstOrNull() ?: emptyList()
                 val finalCustomers = repository.getCustomers(user.email).firstOrNull() ?: emptyList()
                 val finalDealers = repository.getDealers(user.email).firstOrNull() ?: emptyList()
@@ -805,15 +995,47 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 val allShops = repository.getAllShopsOfUser(rootEmail)
                 val additionalShops = allShops.filter { it.email != user.email }
 
+                var processedUser = activeUser
+                val uProfile = uploadImageIfBase64(user.email, activeUser.profilePicture, "profile")
+                val uShop = uploadImageIfBase64(user.email, activeUser.shopPicture, "shop")
+                if (uProfile != activeUser.profilePicture || uShop != activeUser.shopPicture) {
+                    processedUser = activeUser.copy(profilePicture = uProfile, shopPicture = uShop)
+                }
+
+                val processedStock = finalStock.map { stock ->
+                    val sImg = uploadImageIfBase64(user.email, stock.imageResName, "stock_${stock.id}")
+                    if (sImg != stock.imageResName) stock.copy(imageResName = sImg) else stock
+                }
+
+                val processedCustomers = finalCustomers.map { cust ->
+                    val cleanPhone = cust.phone.filter { it.isLetterOrDigit() }
+                    val cImg = uploadImageIfBase64(user.email, cust.photoUri, "cust_$cleanPhone")
+                    if (cImg != cust.photoUri) cust.copy(photoUri = cImg) else cust
+                }
+
+                val processedDealers = finalDealers.map { dlr ->
+                    val cleanPhone = dlr.phone.filter { it.isLetterOrDigit() }
+                    val dImg = uploadImageIfBase64(user.email, dlr.photoUri, "dlr_$cleanPhone")
+                    if (dImg != dlr.photoUri) dlr.copy(photoUri = dImg) else dlr
+                }
+
+                val processedAdditionalShops = additionalShops.map { shop ->
+                    val sProfile = uploadImageIfBase64(shop.email, shop.profilePicture, "profile")
+                    val sShop = uploadImageIfBase64(shop.email, shop.shopPicture, "shop")
+                    if (sProfile != shop.profilePicture || sShop != shop.shopPicture) {
+                        shop.copy(profilePicture = sProfile, shopPicture = sShop)
+                    } else shop
+                }
+
                 val uploadPayload = com.example.api.SyncPayload(
-                    user = activeUser,
-                    stockItems = finalStock,
-                    customers = finalCustomers,
-                    dealers = finalDealers,
+                    user = processedUser,
+                    stockItems = processedStock,
+                    customers = processedCustomers,
+                    dealers = processedDealers,
                     transactions = finalTx,
                     timestamp = System.currentTimeMillis(),
                     registrationTimestamp = remotePayload?.registrationTimestamp ?: remotePayload?.timestamp ?: System.currentTimeMillis(),
-                    additionalShops = additionalShops
+                    additionalShops = processedAdditionalShops
                 )
 
                 val uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(user.email, uploadPayload)
@@ -1559,8 +1781,8 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                             phone = "01319541875",
                             passwordHash = pin.trim(),
                             ownerName = "মোঃ আনিসুজ্জামান অন্তর",
-                            profilePicture = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-                            shopPicture = "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80",
+                            profilePicture = null,
+                            shopPicture = null,
                             ipAddress = "Unknown",
                             registerLocation = "Dhaka, Bangladesh",
                             registerDevice = getDeviceName(),
@@ -1615,44 +1837,33 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                             }
                             
                             // Insert/sync all datasets
-                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0)) }
+                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0, userEmail = cloudUser.email)) }
                             
                             val localCustomerMap = mutableMapOf<Int, Int>()
                             cloudPayload.customers.forEach { cust ->
-                                repository.insertCustomer(cust.copy(id = 0))
+                                val generatedId = repository.insertCustomer(cust.copy(id = 0, userEmail = cloudUser.email))
+                                localCustomerMap[cust.id] = generatedId.toInt()
                             }
-                            val freshCustomers = repository.getCustomers(cloudUser.email).firstOrNull() ?: emptyList()
-                            cloudPayload.customers.forEach { remoteC ->
-                                val matchingL = freshCustomers.find { 
-                                    it.name.trim().lowercase() == remoteC.name.trim().lowercase() && 
-                                    it.phone.trim() == remoteC.phone.trim() 
-                                }
-                                if (matchingL != null) {
-                                    localCustomerMap[remoteC.id] = matchingL.id
-                                }
-                            }
-
+ 
                             val localDealerMap = mutableMapOf<Int, Int>()
                             cloudPayload.dealers.forEach { dlr ->
-                                repository.insertDealer(dlr.copy(id = 0))
+                                val generatedId = repository.insertDealer(dlr.copy(id = 0, userEmail = cloudUser.email))
+                                localDealerMap[dlr.id] = generatedId.toInt()
                             }
-                            val freshDealers = repository.getDealers(cloudUser.email).firstOrNull() ?: emptyList()
-                            cloudPayload.dealers.forEach { remoteD ->
-                                val matchingL = freshDealers.find {
-                                    it.name.trim().lowercase() == remoteD.name.trim().lowercase() &&
-                                    it.phone.trim() == remoteD.phone.trim()
-                                }
-                                if (matchingL != null) {
-                                    localDealerMap[remoteD.id] = matchingL.id
-                                }
-                            }
-
+ 
                             cloudPayload.transactions.forEach { tx ->
                                 val localCustId = tx.customerId?.let { localCustomerMap[it] }
                                 val localDlrId = tx.dealerId?.let { localDealerMap[it] }
-                                repository.insertTransaction(tx.copy(id = 0, customerId = localCustId, dealerId = localDlrId))
+                                repository.insertTransaction(
+                                    tx.copy(
+                                        id = 0,
+                                        userEmail = cloudUser.email,
+                                        customerId = localCustId,
+                                        dealerId = localDlrId
+                                    )
+                                )
                             }
-
+ 
                             user = cloudUser
                         }
                     }
@@ -1674,7 +1885,8 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 _currentScreen.value = "DASHBOARD"
                 _authStateMessage.value = null
 
-                // Fire a background sync to fetch any latest updates
+                // Fire off background image restoration and sync
+                downloadRemoteImagesInBackground(user.email)
                 triggerCloudSync(isManual = false)
 
                 withContext(Dispatchers.Main) {
@@ -1692,7 +1904,141 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         }
     }
 
+    fun recoverAllCloudData() {
+        val userItem = _currentUser.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isCloudSyncing.value = true
+            withContext(Dispatchers.Main) {
+                showToast(if (_isBengali.value) "ক্লাউড থেকে ডাটা এবং ইমেজ পুনরুদ্ধার শুরু হয়েছে..." else "Starting cloud data and image recovery...")
+            }
+
+            try {
+                // 1. Download payload directly
+                val remotePayload = com.example.api.CloudSyncEngine.downloadPayload(userItem.email)
+                if (remotePayload == null) {
+                    withContext(Dispatchers.Main) {
+                        _isCloudSyncing.value = false
+                        showToast(if (_isBengali.value) "দুঃখিত! ক্লাউডে কোনো পূর্ববর্তী ব্যাকআপ পাওয়া যায়নি।" else "Sorry! No prior backup found on cloud.")
+                    }
+                    return@launch
+                }
+
+                val remoteUser = remotePayload.user
+                
+                // Save/update user profile
+                repository.updateUser(remoteUser)
+                withContext(Dispatchers.Main) {
+                    _currentUser.value = remoteUser
+                }
+
+                // Restore/Merge Stocks
+                remotePayload.stockItems.forEach { stock ->
+                    val existing = repository.getStockItems(userItem.email).firstOrNull()?.find { it.name.trim().lowercase() == stock.name.trim().lowercase() }
+                    if (existing != null) {
+                        repository.updateStockItem(existing.copy(purchasePrice = stock.purchasePrice, salesPrice = stock.salesPrice, stockCount = stock.stockCount, category = stock.category, imageResName = stock.imageResName, unit = stock.unit))
+                    } else {
+                        repository.insertStockItem(stock.copy(id = 0, userEmail = userItem.email))
+                    }
+                }
+
+                // Restore/Merge Customers
+                val localCustomerMap = mutableMapOf<Int, Int>()
+                val activeL = repository.getCustomers(userItem.email).firstOrNull() ?: emptyList()
+                for (remoteCust in remotePayload.customers) {
+                    val matchingLocal = activeL.find { 
+                        it.name.trim().lowercase() == remoteCust.name.trim().lowercase() && 
+                        it.phone.trim() == remoteCust.phone.trim() 
+                    }
+                    if (matchingLocal != null) {
+                        repository.updateCustomer(matchingLocal.copy(address = remoteCust.address, totalDue = remoteCust.totalDue, photoUri = remoteCust.photoUri))
+                        localCustomerMap[remoteCust.id] = matchingLocal.id
+                    } else {
+                        val genId = repository.insertCustomer(remoteCust.copy(id = 0, userEmail = userItem.email))
+                        localCustomerMap[remoteCust.id] = genId.toInt()
+                    }
+                }
+
+                // Restore/Merge Dealers
+                val localDealerMap = mutableMapOf<Int, Int>()
+                val activeD = repository.getDealers(userItem.email).firstOrNull() ?: emptyList()
+                for (remoteDlr in remotePayload.dealers) {
+                    val matchingLocal = activeD.find {
+                        it.name.trim().lowercase() == remoteDlr.name.trim().lowercase() &&
+                        it.phone.trim() == remoteDlr.phone.trim()
+                    }
+                    if (matchingLocal != null) {
+                        repository.updateDealer(matchingLocal.copy(company = remoteDlr.company, totalOwed = remoteDlr.totalOwed, photoUri = remoteDlr.photoUri))
+                        localDealerMap[remoteDlr.id] = matchingLocal.id
+                    } else {
+                        val genId = repository.insertDealer(remoteDlr.copy(id = 0, userEmail = userItem.email))
+                        localDealerMap[remoteDlr.id] = genId.toInt()
+                    }
+                }
+
+                // Restore/Merge Transactions
+                val activeT = repository.getTransactions(userItem.email).firstOrNull() ?: emptyList()
+                for (remoteT in remotePayload.transactions) {
+                    val exists = activeT.any {
+                        it.title == remoteT.title &&
+                        java.lang.Math.abs(it.amount - remoteT.amount) < 0.01 &&
+                        it.type == remoteT.type &&
+                        it.timestamp == remoteT.timestamp
+                    }
+                    if (!exists) {
+                        val localCustId = remoteT.customerId?.let { localCustomerMap[it] }
+                        val localDlrId = remoteT.dealerId?.let { localDealerMap[it] }
+                        repository.insertTransaction(remoteT.copy(id = 0, userEmail = userItem.email, customerId = localCustId, dealerId = localDlrId))
+                    }
+                }
+
+                // Force background download of all pictures
+                downloadRemoteImagesInBackground(userItem.email)
+
+                withContext(Dispatchers.Main) {
+                    _isCloudSyncing.value = false
+                    showToast(if (_isBengali.value) "রিকভারি সফলভাবে সম্পন্ন হয়েছে! ব্যাকগ্রাউন্ডে ইমেজ ডাউনলোড হচ্ছে।" else "Recovery executed successfully! Images are downloading in background.")
+                }
+            } catch (e: Exception) {
+                Log.e("AppViewModel", "Recovery failed", e)
+                withContext(Dispatchers.Main) {
+                    _isCloudSyncing.value = false
+                    showToast(if (_isBengali.value) "রিকভারি করা সম্ভব হয়নি: ইন্টারনেট সংযোগ পরীক্ষা করুন।" else "Recovery could not complete: check your internet connection.")
+                }
+            }
+        }
+    }
+
     fun logout() {
+        val userObj = _currentUser.value
+        if (userObj != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val finalStock = repository.getStockItems(userObj.email).firstOrNull() ?: emptyList()
+                    val finalCustomers = repository.getCustomers(userObj.email).firstOrNull() ?: emptyList()
+                    val finalDealers = repository.getDealers(userObj.email).firstOrNull() ?: emptyList()
+                    val finalTx = repository.getTransactions(userObj.email).firstOrNull() ?: emptyList()
+                    
+                    val rootEmail = getBaseEmail(userObj.email)
+                    val allShops = repository.getAllShopsOfUser(rootEmail)
+                    val additionalShops = allShops.filter { it.email != userObj.email }
+                    
+                    val existingPayload = com.example.api.CloudSyncEngine.downloadPayload(userObj.email)
+                    val uploadPayload = com.example.api.SyncPayload(
+                        user = userObj,
+                        stockItems = finalStock,
+                        customers = finalCustomers,
+                        dealers = finalDealers,
+                        transactions = finalTx,
+                        timestamp = System.currentTimeMillis(),
+                        registrationTimestamp = existingPayload?.registrationTimestamp ?: existingPayload?.timestamp ?: System.currentTimeMillis(),
+                        additionalShops = additionalShops
+                    )
+                    com.example.api.CloudSyncEngine.uploadPayload(userObj.email, uploadPayload)
+                } catch (e: Exception) {
+                    Log.e("AppViewModel", "Failed to sync timestamp on logout", e)
+                }
+            }
+        }
         _currentUser.value = null
         _currentScreen.value = "LOGIN"
     }

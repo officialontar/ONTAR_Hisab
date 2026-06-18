@@ -616,7 +616,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     onDismissRequest = { showAddCustomerDialog = false },
                     title = { Text(Translator.get("add_customer", isBn), fontWeight = FontWeight.Bold) },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             Button(
                                 onClick = {
                                     contactPickTarget = "ADD"
@@ -792,7 +792,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     // Gallery Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { photoPickerLauncher.launch("image/*") },
@@ -809,7 +809,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     // Camera Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { cameraLauncher.launch(null) },
@@ -850,7 +850,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     if (isCustomSelected) {
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
                                                 .clickable { /* Already selected */ }
@@ -881,7 +881,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                         val isSelected = customerPhotoUri == avatarUrl
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
                                                 .clickable { customerPhotoUri = avatarUrl }
@@ -948,7 +948,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     onDismissRequest = { customerToEdit = null },
                     title = { Text(if (isBn) "কাস্টমার প্রোফাইল সম্পাদন" else "Edit Customer Profile", fontWeight = FontWeight.Bold) },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             Button(
                                 onClick = {
                                     contactPickTarget = "EDIT"
@@ -1083,7 +1083,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     // Gallery Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { editPhotoPickerLauncher.launch("image/*") },
@@ -1100,7 +1100,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     // Camera Picker Card
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
+                                            .size(54.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(colors.primary.copy(alpha = 0.12f))
                                             .clickable { editCameraLauncher.launch(null) },
@@ -1141,7 +1141,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     if (isCustomSelected) {
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .border(2.dp, colors.primary, RoundedCornerShape(8.dp))
                                                 .clickable { /* Already selected */ }
@@ -1172,7 +1172,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                         val isSelected = editCustomerPhotoUri == avatarUrl
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(54.dp)
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .background(if (isSelected) colors.primary.copy(alpha = 0.2f) else Color.Transparent)
                                                 .clickable { editCustomerPhotoUri = avatarUrl }

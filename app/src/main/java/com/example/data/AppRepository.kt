@@ -28,7 +28,7 @@ class AppRepository(private val appDao: AppDao) {
 
     fun getStockItems(userEmail: String): Flow<List<StockItem>> = appDao.getStockItemsOfUser(userEmail)
 
-    suspend fun insertStockItem(item: StockItem) = appDao.insertStockItem(item)
+    suspend fun insertStockItem(item: StockItem): Long = appDao.insertStockItem(item)
 
     suspend fun updateStockItem(item: StockItem) = appDao.updateStockItem(item)
 
@@ -36,7 +36,7 @@ class AppRepository(private val appDao: AppDao) {
 
     fun getCustomers(userEmail: String): Flow<List<Customer>> = appDao.getCustomersOfUser(userEmail)
 
-    suspend fun insertCustomer(customer: Customer) = appDao.insertCustomer(customer)
+    suspend fun insertCustomer(customer: Customer): Long = appDao.insertCustomer(customer)
 
     suspend fun updateCustomer(customer: Customer) = appDao.updateCustomer(customer)
 
@@ -44,7 +44,7 @@ class AppRepository(private val appDao: AppDao) {
 
     fun getDealers(userEmail: String): Flow<List<Dealer>> = appDao.getDealersOfUser(userEmail)
 
-    suspend fun insertDealer(dealer: Dealer) = appDao.insertDealer(dealer)
+    suspend fun insertDealer(dealer: Dealer): Long = appDao.insertDealer(dealer)
 
     suspend fun updateDealer(dealer: Dealer) = appDao.updateDealer(dealer)
 
@@ -52,7 +52,7 @@ class AppRepository(private val appDao: AppDao) {
 
     fun getTransactions(userEmail: String): Flow<List<TransactionRecord>> = appDao.getTransactionsOfUser(userEmail)
 
-    suspend fun insertTransaction(transaction: TransactionRecord) = appDao.insertTransaction(transaction)
+    suspend fun insertTransaction(transaction: TransactionRecord): Long = appDao.insertTransaction(transaction)
 
     suspend fun deleteTransaction(transaction: TransactionRecord) = appDao.deleteTransaction(transaction)
 }

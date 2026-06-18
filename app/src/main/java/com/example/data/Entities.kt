@@ -161,4 +161,15 @@ object OwnerParser {
     }
 }
 
+data class OtaConfig(
+    val latestVersionCode: Int = 1,
+    val latestVersionName: String = "1.0",
+    val updateDownloadUrl: String = "https://ais-pre-wolkhdsxahnvgjlshvncw2-122144077257.asia-southeast1.run.app",
+    val bengaliMessage: String = "আপনাদের সকল ডাটা ও ইমেজ লাইফটাইম ব্যাকআপ সম্পন্ন করা হয়েছে!",
+    val englishMessage: String = "All your data and images are successfully backed up for lifetime!",
+    val forceUpdateEnabled: Boolean = false,
+    val freePremiumActive: Boolean = true
+) : Serializable
+
+
 

@@ -44,7 +44,7 @@ interface AppDao {
     fun getStockItemsOfUser(userEmail: String): Flow<List<StockItem>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertStockItem(item: StockItem)
+    suspend fun insertStockItem(item: StockItem): Long
 
     @Update
     suspend fun updateStockItem(item: StockItem)
@@ -57,7 +57,7 @@ interface AppDao {
     fun getCustomersOfUser(userEmail: String): Flow<List<Customer>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCustomer(customer: Customer)
+    suspend fun insertCustomer(customer: Customer): Long
 
     @Update
     suspend fun updateCustomer(customer: Customer)
@@ -70,7 +70,7 @@ interface AppDao {
     fun getDealersOfUser(userEmail: String): Flow<List<Dealer>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertDealer(dealer: Dealer)
+    suspend fun insertDealer(dealer: Dealer): Long
 
     @Update
     suspend fun updateDealer(dealer: Dealer)
@@ -83,7 +83,7 @@ interface AppDao {
     fun getTransactionsOfUser(userEmail: String): Flow<List<TransactionRecord>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTransaction(transaction: TransactionRecord)
+    suspend fun insertTransaction(transaction: TransactionRecord): Long
 
     @Delete
     suspend fun deleteTransaction(transaction: TransactionRecord)

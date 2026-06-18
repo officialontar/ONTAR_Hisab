@@ -320,4 +320,52 @@ object CloudSyncEngine {
             false
         }
     }
+
+    /**
+     * Upload an individual image to its own key on kvdb.io to avoid bloating the main payload
+     */
+    suspend fun uploadIndividualImage(imageKey: String, base64Data: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (imageKey.isBlank() || base64Data.isBlank()) return@withContext false
+        val url = "$BASE_URL$imageKey"
+        try {
+            val requestBody = base64Data.toRequestBody("text/plain".toMediaType())
+            val request = Request.Builder()
+                .url(url)
+                .post(requestBody)
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    Log.d(TAG, "Uploaded individual image successfully for key: $imageKey")
+                    true
+                } else {
+                    Log.e(TAG, "Failed to upload individual image: Code ${response.code}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception uploading individual image: $imageKey", e)
+            false
+        }
+    }
+
+    /**
+     * Download an individual image base64 resource from its own key on kvdb.io
+     */
+    suspend fun downloadIndividualImage(imageKey: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (imageKey.isBlank()) return@withContext null
+        val url = "$BASE_URL$imageKey"
+        try {
+            val request = Request.Builder().url(url).get().build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    response.body?.string()?.trim()
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception downloading individual image: $imageKey", e)
+            null
+        }
+    }
 }

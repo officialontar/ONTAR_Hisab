@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -73,6 +74,18 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var editProfilePic by remember { mutableStateOf("") }
     var editShopPic by remember { mutableStateOf("") }
 
+    var editOwnershipType by remember { mutableStateOf("single") }
+    var editJointCount by remember { mutableStateOf(2) }
+    var editJointName1 by remember { mutableStateOf("") }
+    var editJointPhone1 by remember { mutableStateOf("") }
+    var editJointEmail1 by remember { mutableStateOf("") }
+    var editJointName2 by remember { mutableStateOf("") }
+    var editJointPhone2 by remember { mutableStateOf("") }
+    var editJointEmail2 by remember { mutableStateOf("") }
+    var editJointName3 by remember { mutableStateOf("") }
+    var editJointPhone3 by remember { mutableStateOf("") }
+    var editJointEmail3 by remember { mutableStateOf("") }
+
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showFactoryResetConfirmDialog by remember { mutableStateOf(false) }
     var userToDelete by remember { mutableStateOf<User?>(null) }
@@ -81,6 +94,27 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var userForDeviceManagement by remember { mutableStateOf<User?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    val currentOtaConfig by viewModel.otaConfig.collectAsState()
+    
+    var otaCodeInput by remember { mutableStateOf("1") }
+    var otaNameInput by remember { mutableStateOf("1.0") }
+    var otaUrLInput by remember { mutableStateOf("https://ais-pre-wolkhdsxahnvgjlshvncw2-122144077257.asia-southeast1.run.app") }
+    var otaBnMsgInput by remember { mutableStateOf("") }
+    var otaEnMsgInput by remember { mutableStateOf("") }
+    var otaForceUpdate by remember { mutableStateOf(false) }
+    var otaFreePremium by remember { mutableStateOf(true) }
+
+    // Initialize local inputs from live flow
+    LaunchedEffect(currentOtaConfig) {
+        otaCodeInput = currentOtaConfig.latestVersionCode.toString()
+        otaNameInput = currentOtaConfig.latestVersionName
+        otaUrLInput = currentOtaConfig.updateDownloadUrl
+        otaBnMsgInput = currentOtaConfig.bengaliMessage
+        otaEnMsgInput = currentOtaConfig.englishMessage
+        otaForceUpdate = currentOtaConfig.forceUpdateEnabled
+        otaFreePremium = currentOtaConfig.freePremiumActive
+    }
 
     val adminProfilePicLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -190,28 +224,29 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                 userList.forEach { u ->
                     val emailKey = u.email.trim().lowercase()
                     val payload = payloadsMap[emailKey]
+                    val isSelf = emailKey == (viewModel.currentUser.value?.email?.trim()?.lowercase() ?: "")
                     if (payload != null) {
                         tempCust += payload.customers.size
                         tempTx += payload.transactions.size
-                        syncTimeMap[u.email] = payload.timestamp
+                        syncTimeMap[emailKey] = if (isSelf) System.currentTimeMillis() else payload.timestamp
                         
                         // Consider user active if synced within last 72 hours (3 days) OR has any transaction within the last 72 hours
                         val last72HoursMs = 72L * 60 * 60 * 1000
                         val isSyncedRecently = (System.currentTimeMillis() - payload.timestamp) <= last72HoursMs
                         val hasRecentTransaction = payload.transactions.any { (System.currentTimeMillis() - it.timestamp) <= last72HoursMs }
-                        val isActive = isSyncedRecently || hasRecentTransaction
-                        statusMap[u.email] = isActive
+                        val isActive = isSyncedRecently || hasRecentTransaction || isSelf
+                        statusMap[emailKey] = isActive
                         if (isActive) actUsers++ else inactUsers++
 
                         // Calculate sum of customer dues and dealer dues
-                        custDuesMap[u.email] = payload.customers.sumOf { it.totalDue }
-                        dealDuesMap[u.email] = payload.dealers.sumOf { it.totalOwed }
+                        custDuesMap[emailKey] = payload.customers.sumOf { it.totalDue }
+                        dealDuesMap[emailKey] = payload.dealers.sumOf { it.totalOwed }
                     } else {
-                        statusMap[u.email] = false
-                        syncTimeMap[u.email] = 0L
-                        inactUsers++
-                        custDuesMap[u.email] = 0.0
-                        dealDuesMap[u.email] = 0.0
+                        statusMap[emailKey] = isSelf
+                        syncTimeMap[emailKey] = if (isSelf) System.currentTimeMillis() else 0L
+                        if (isSelf) actUsers++ else inactUsers++
+                        custDuesMap[emailKey] = 0.0
+                        dealDuesMap[emailKey] = 0.0
                     }
 
                     // Count active and blocked devices
@@ -523,6 +558,201 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
             } // end of stats banner item
 
 
+            // OTA Config Manager Card for Admin Controls
+            item {
+                var isOtaCollapsed by remember { mutableStateOf(true) }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .border(1.5.dp, colors.primary.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = colors.surfaceColorAtElevation(1.dp)),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isOtaCollapsed = !isOtaCollapsed },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Build,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = if (isBn) "🚀 ওটিএ আপডেট ও ফিচার কন্ট্রোল" else "🚀 OTA Update & Feature Control",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colors.primary
+                                    )
+                                    Text(
+                                        text = if (isBn) "অন্য সকল ইউজারদের অ্যাপস অটো-আপডেট সেটিংস" else "Manage real-time updates for all user devices",
+                                        fontSize = 10.sp,
+                                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = if (isOtaCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Expand",
+                                tint = colors.primary
+                            )
+                        }
+
+                        if (!isOtaCollapsed) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // 1. Version Code Input
+                            OutlinedTextField(
+                                value = otaCodeInput,
+                                onValueChange = { otaCodeInput = it.filter { char -> char.isDigit() } },
+                                label = { Text(if (isBn) "সর্বশেষ সংস্করণ কোড (Latest Version Code)" else "Latest Version Code") },
+                                placeholder = { Text("e.g. 2") },
+                                leadingIcon = { Icon(Icons.Default.Build, null) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            // 2. Version Name Input
+                            OutlinedTextField(
+                                value = otaNameInput,
+                                onValueChange = { otaNameInput = it },
+                                label = { Text(if (isBn) "সংস্করণ নাম (Version Name String)" else "Version Name String") },
+                                placeholder = { Text("e.g. 1.2") },
+                                leadingIcon = { Icon(Icons.Default.Info, null) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            // 3. Update Download Link Input
+                            OutlinedTextField(
+                                value = otaUrLInput,
+                                onValueChange = { otaUrLInput = it },
+                                label = { Text(if (isBn) "ডাউনলোড লিংক (Direct APK Link)" else "Direct APK Download Link") },
+                                leadingIcon = { Icon(Icons.Default.Share, null) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            // 4. Bengali Alert Message Broadcast Input
+                            OutlinedTextField(
+                                value = otaBnMsgInput,
+                                onValueChange = { otaBnMsgInput = it },
+                                label = { Text(if (isBn) "বাংলা ঘোষণা / নোটিশ (Notice in Bengali)" else "Notice in Bengali") },
+                                leadingIcon = { Icon(Icons.Default.Notifications, null) },
+                                maxLines = 4,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            // 5. English Alert Message Broadcast Input
+                            OutlinedTextField(
+                                value = otaEnMsgInput,
+                                onValueChange = { otaEnMsgInput = it },
+                                label = { Text(if (isBn) "ইংরেজি ঘোষণা / নোটিশ (Notice in English)" else "Notice in English") },
+                                leadingIcon = { Icon(Icons.Default.Notifications, null) },
+                                maxLines = 4,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            )
+
+                            // 6. Force Update Screen Enforced Toggle
+                            Row(
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp, top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(0.8f)) {
+                                    Text(
+                                        text = if (isBn) "বাধ্যতামূলক আপডেট আবশ্যক?" else "Mandatory Force Update?",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = colors.onSurface
+                                    )
+                                    Text(
+                                        text = if (isBn) "অনুমতি দিলে ইউজাররা আপডেট না করা পর্যন্ত অ্যাপ ব্যবহার করতে পারবে না" else "If enabled, blocks application access until user updates",
+                                        fontSize = 10.sp,
+                                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Switch(
+                                    checked = otaForceUpdate,
+                                    onCheckedChange = { otaForceUpdate = it }
+                                )
+                            }
+
+                            // 7. Free & Smooth Lifetime Access (Enabled by default as requested by user)
+                            Row(
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp, top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(0.8f)) {
+                                    Text(
+                                        text = if (isBn) "১০০% প্রি-অ্যাক্টিভেটেড ফ্রিতে সব ফিচার সচল?" else "100% Pre-Activated Free Access?",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = colors.onSurface
+                                    )
+                                    Text(
+                                        text = if (isBn) "সকল ইউজার কোনো ঝামেলা ছাড়া ফ্রিতে সব ফিচার ব্যবহার করতে পারবে" else "Allows all users globally to utilize everything fully without payment locks",
+                                        fontSize = 10.sp,
+                                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Switch(
+                                    checked = otaFreePremium,
+                                    onCheckedChange = { otaFreePremium = it }
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    val codeInt = otaCodeInput.toIntOrNull() ?: 1
+                                    val newConfig = com.example.data.OtaConfig(
+                                        latestVersionCode = codeInt,
+                                        latestVersionName = otaNameInput.trim(),
+                                        updateDownloadUrl = otaUrLInput.trim(),
+                                        bengaliMessage = otaBnMsgInput.trim(),
+                                        englishMessage = otaEnMsgInput.trim(),
+                                        forceUpdateEnabled = otaForceUpdate,
+                                        freePremiumActive = otaFreePremium
+                                    )
+                                    viewModel.updateGlobalOtaConfig(newConfig)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "আপডেট ক্লাউডে সেভ করুন" else "Publish Update Configuration",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+
 
             if (feedbackMessage != null) {
                 item {
@@ -690,7 +920,8 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                                 )
 
                                                 Spacer(modifier = Modifier.height(2.dp))
-                                                val isActive = activeStatuses[user.email] ?: false
+                                                val userEmailNormalized = user.email.trim().lowercase()
+                                                val isActive = activeStatuses[userEmailNormalized] ?: false
                                                 
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically
@@ -716,7 +947,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                                     )
                                                 }
 
-                                                val syncTime = lastSyncTimes[user.email] ?: 0L
+                                                val syncTime = lastSyncTimes[userEmailNormalized] ?: 0L
                                                 if (syncTime > 0L) {
                                                     Spacer(modifier = Modifier.height(2.dp))
                                                     val sdf = java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a", java.util.Locale.getDefault())
@@ -730,46 +961,62 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                             }
                                         }
 
-                                        // Dynamic Owner / Partners Card details rendering (Aesthetic, Professional!)
+                                        // Dynamic Owner / Partners Card details rendering (Modern, unified single box/container!)
                                         val parsedOwners = com.example.data.OwnerParser.deserialize(user.getLocalizedOwnerName(isBn), user.phone, user.email)
-                                        parsedOwners.forEachIndexed { idx, owner ->
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
-                                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.2f)),
-                                                border = BorderStroke(0.5.dp, colors.outlineVariant.copy(alpha = 0.5f))
-                                            ) {
-                                                Column(modifier = Modifier.padding(8.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.25f)),
+                                            border = BorderStroke(0.5.dp, colors.outlineVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Column(modifier = Modifier.padding(10.dp)) {
+                                                Text(
+                                                    text = if (isBn) "👤 মালিক ও অংশীদারগণের তথ্য" else "👤 Owners & Partners Details",
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 12.sp,
+                                                    color = colors.primary,
+                                                    modifier = Modifier.padding(bottom = 6.dp)
+                                                )
+
+                                                parsedOwners.forEachIndexed { idx, owner ->
+                                                    if (idx > 0) {
+                                                        Spacer(modifier = Modifier.height(10.dp))
+                                                        HorizontalDivider(color = colors.onSurface.copy(alpha = 0.08f))
+                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                    }
+
                                                     Text(
                                                         text = if (isBn) "অংশীদার #${idx + 1}" else "Partner #${idx + 1}",
-                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp,
-                                                        color = colors.primary,
+                                                        color = colors.secondary.copy(alpha = 0.85f),
                                                         modifier = Modifier.padding(bottom = 4.dp)
                                                     )
 
-                                                    // Name Row
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        modifier = Modifier.padding(vertical = 2.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = androidx.compose.material.icons.Icons.Default.Person,
-                                                            contentDescription = "Name",
-                                                            tint = colors.primary,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text(
-                                                            text = owner.name.ifBlank { if (isBn) "নামবিহীন অংশীদার" else "Unnamed Partner" },
-                                                            fontSize = 12.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = colors.onSurface
-                                                        )
+                                                    // Name Row with Icon
+                                                    if (owner.name.isNotBlank()) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = androidx.compose.material.icons.Icons.Default.Person,
+                                                                contentDescription = "Name",
+                                                                tint = colors.primary,
+                                                                modifier = Modifier.size(15.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = owner.name,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = colors.onSurface
+                                                            )
+                                                        }
                                                     }
 
-                                                    // Phone Row
+                                                    // Phone Row with Icon
                                                     if (owner.phone.isNotBlank()) {
                                                         Row(
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -779,18 +1026,19 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                                                 imageVector = androidx.compose.material.icons.Icons.Default.Phone,
                                                                 contentDescription = "Phone",
                                                                 tint = Color(0xFF4CAF50),
-                                                                modifier = Modifier.size(14.dp)
+                                                                modifier = Modifier.size(15.dp)
                                                             )
                                                             Spacer(modifier = Modifier.width(6.dp))
                                                             Text(
                                                                 text = owner.phone,
                                                                 fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Medium,
                                                                 color = colors.onSurfaceVariant
                                                             )
                                                         }
                                                     }
 
-                                                    // Email Row
+                                                    // Email Row with Icon
                                                     if (owner.email.isNotBlank()) {
                                                         Row(
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -946,8 +1194,9 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                 }
 
                                 // Financial dues from the user's synced database
-                                val customerDues = customerDuesMap[user.email] ?: 0.0
-                                val dealerDues = dealerDuesMap[user.email] ?: 0.0
+                                val localMapKey = user.email.trim().lowercase()
+                                val customerDues = customerDuesMap[localMapKey] ?: 0.0
+                                val dealerDues = dealerDuesMap[localMapKey] ?: 0.0
 
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Card(
@@ -1025,6 +1274,38 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                     Button(
                                         onClick = {
                                             userToEdit = user
+                                            val listOwners = com.example.data.OwnerParser.deserialize(user.getLocalizedOwnerName(isBn), user.phone, user.email)
+                                            if (listOwners.size > 1) {
+                                                editOwnershipType = "joint"
+                                                editJointCount = listOwners.size
+                                                editJointName1 = listOwners.getOrNull(0)?.name ?: ""
+                                                editJointPhone1 = listOwners.getOrNull(0)?.phone ?: ""
+                                                editJointEmail1 = listOwners.getOrNull(0)?.email ?: ""
+                                                editJointName2 = listOwners.getOrNull(1)?.name ?: ""
+                                                editJointPhone2 = listOwners.getOrNull(1)?.phone ?: ""
+                                                editJointEmail2 = listOwners.getOrNull(1)?.email ?: ""
+                                                if (listOwners.size > 2) {
+                                                    editJointName3 = listOwners.getOrNull(2)?.name ?: ""
+                                                    editJointPhone3 = listOwners.getOrNull(2)?.phone ?: ""
+                                                    editJointEmail3 = listOwners.getOrNull(2)?.email ?: ""
+                                                } else {
+                                                    editJointName3 = ""
+                                                    editJointPhone3 = ""
+                                                    editJointEmail3 = ""
+                                                }
+                                            } else {
+                                                editOwnershipType = "single"
+                                                editJointCount = 2
+                                                editJointName1 = listOwners.getOrNull(0)?.name ?: ""
+                                                editJointPhone1 = listOwners.getOrNull(0)?.phone ?: ""
+                                                editJointEmail1 = listOwners.getOrNull(0)?.email ?: ""
+                                                editJointName2 = ""
+                                                editJointPhone2 = ""
+                                                editJointEmail2 = ""
+                                                editJointName3 = ""
+                                                editJointPhone3 = ""
+                                                editJointEmail3 = ""
+                                            }
                                             editShopName = user.getLocalizedShopName(isBn)
                                             editOwnerName = user.getLocalizedOwnerName(isBn)
                                             editPhone = user.phone
@@ -1295,22 +1576,270 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                     OutlinedTextField(
                         value = editShopName,
                         onValueChange = { editShopName = it },
-                        label = { Text(if (isBn) "দোকানের নাম" else "Shop Name") }
+                        label = { Text(if (isBn) "দোকানের নাম" else "Shop Name") },
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = editOwnerName,
-                        onValueChange = { editOwnerName = it },
-                        label = { Text(if (isBn) "মালিকের নাম / অংশীদার" else "Owner Name / Partners") }
-                    )
-                    OutlinedTextField(
-                        value = editPhone,
-                        onValueChange = { editPhone = it },
-                        label = { Text(if (isBn) "মোবাইল" else "Phone") }
-                    )
+
+                    // Ownership Type Selection Row
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isBn) "দোকানের মালিকানার ধরন:" else "Ownership Type:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (editOwnershipType == "single") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { editOwnershipType = "single" }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isBn) "একক মালিক (১)" else "Single Owner (1)",
+                                    color = if (editOwnershipType == "single") colors.onPrimary else colors.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (editOwnershipType == "joint") colors.primary else colors.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable { editOwnershipType = "joint" }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isBn) "যৌথ মালিক (>১)" else "Joint Owners (>1)",
+                                    color = if (editOwnershipType == "joint") colors.onPrimary else colors.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
+                    if (editOwnershipType == "joint") {
+                        // Joint Owner count selector
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        ) {
+                            Text(
+                                text = if (isBn) "মালিকের সংখ্যা:" else "Number of Owners:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.secondary,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editJointCount == 2) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                        .clickable { editJointCount = 2 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isBn) "২ জন অংশীদার" else "2 Partners",
+                                        color = if (editJointCount == 2) colors.onSecondary else colors.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (editJointCount == 3) colors.secondary else colors.surfaceVariant.copy(alpha = 0.3f))
+                                        .clickable { editJointCount = 3 }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isBn) "৩ জন অংশীদার" else "3 Partners",
+                                        color = if (editJointCount == 3) colors.onSecondary else colors.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Render Owner 1 Details inside Dialog
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.4f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = if (editOwnershipType == "single") {
+                                    if (isBn) "👤 মালিকের তথ্য:" else "👤 Owner Information:"
+                                } else {
+                                    if (isBn) "👤 প্রথম মালিকের তথ্য (Owner 1):" else "👤 Owner 1 Details:"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = editJointName1,
+                                onValueChange = { editJointName1 = it },
+                                label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            )
+                            OutlinedTextField(
+                                value = editJointPhone1,
+                                onValueChange = { editJointPhone1 = it },
+                                label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            )
+                            OutlinedTextField(
+                                value = editJointEmail1,
+                                onValueChange = { editJointEmail1 = it },
+                                label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    if (editOwnershipType == "joint") {
+                        // Render Joint Owner 2 Details inside Dialog
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.4f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = if (isBn) "👤 দ্বিতীয় মালিকের তথ্য (Owner 2):" else "👤 Owner 2 Details:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = editJointName2,
+                                    onValueChange = { editJointName2 = it },
+                                    label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                    leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointPhone2,
+                                    onValueChange = { editJointPhone2 = it },
+                                    label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                    leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                                OutlinedTextField(
+                                    value = editJointEmail2,
+                                    onValueChange = { editJointEmail2 = it },
+                                    label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                    leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        if (editJointCount == 3) {
+                            // Render Joint Owner 3 Details inside Dialog
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.4f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = if (isBn) "👤 তৃতীয় মালিকের তথ্য (Owner 3):" else "👤 Owner 3 Details:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = editJointName3,
+                                        onValueChange = { editJointName3 = it },
+                                        label = { Text(if (isBn) "পূর্ণ নাম" else "Full Name") },
+                                        leadingIcon = { Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = editJointPhone3,
+                                        onValueChange = { editJointPhone3 = it },
+                                        label = { Text(if (isBn) "মোবাইল নাম্বার" else "Mobile Number") },
+                                        leadingIcon = { Icon(Icons.Default.Phone, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = editJointEmail3,
+                                        onValueChange = { editJointEmail3 = it },
+                                        label = { Text(if (isBn) "ইমেইল অ্যাড্রেস" else "Email Address") },
+                                        leadingIcon = { Icon(Icons.Default.Email, null, modifier = Modifier.size(16.dp)) },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = editPin,
                         onValueChange = { editPin = it },
-                        label = { Text(if (isBn) "পাসওয়ার্ড পিন" else "Password PIN") }
+                        label = { Text(if (isBn) "পাসওয়ার্ড পিন" else "Password PIN") },
+                        modifier = Modifier.fillMaxWidth()
                     )
                     
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1476,10 +2005,28 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                             showEditDialog = false
                             isLoading = true
                             
+                            val updatedOwners = if (editOwnershipType == "single") {
+                                listOf(com.example.data.OwnerInfo(name = editJointName1, phone = editJointPhone1, email = editJointEmail1))
+                            } else {
+                                val temp = mutableListOf<com.example.data.OwnerInfo>()
+                                temp.add(com.example.data.OwnerInfo(name = editJointName1, phone = editJointPhone1, email = editJointEmail1))
+                                temp.add(com.example.data.OwnerInfo(name = editJointName2, phone = editJointPhone2, email = editJointEmail2))
+                                if (editJointCount == 3) {
+                                    temp.add(com.example.data.OwnerInfo(name = editJointName3, phone = editJointPhone3, email = editJointEmail3))
+                                }
+                                temp
+                            }
+                            
+                            val serializedName = com.example.data.OwnerParser.serialize(updatedOwners)
+                            val combinedPhones = updatedOwners.map { it.phone }.filter { it.isNotBlank() }.joinToString(",")
+                            var combinedEmail = updatedOwners.firstOrNull()?.email ?: ""
+                            if (combinedEmail.isBlank()) combinedEmail = original.email
+
                             val updatedUser = original.copy(
                                 shopName = editShopName,
-                                ownerName = editOwnerName,
-                                phone = editPhone,
+                                ownerName = serializedName,
+                                phone = combinedPhones,
+                                email = combinedEmail,
                                 passwordHash = editPin,
                                 profilePicture = editProfilePic.ifBlank { null },
                                 shopPicture = editShopPic.ifBlank { null }

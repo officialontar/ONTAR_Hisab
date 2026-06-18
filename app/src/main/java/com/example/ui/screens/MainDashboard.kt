@@ -1169,6 +1169,77 @@ fun MainDashboard(viewModel: AppViewModel) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val otaConfig by viewModel.otaConfig.collectAsState()
+                if (otaConfig.latestVersionCode > 1) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = colors.primaryContainer.copy(alpha = 0.85f)
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Build,
+                                    contentDescription = "Update Info",
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = if (isBn) "নতুন সফটওয়্যার আপডেট উপলব্ধ (v${otaConfig.latestVersionName})!" else "New Software Update Available (v${otaConfig.latestVersionName})!",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    color = colors.onPrimaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (isBn) {
+                                    otaConfig.bengaliMessage.ifBlank { "সকল আপডেট ফিচার ও লাইফটাইম ডাটা ব্যাকআপ ফ্রিতে পেতে এখনই নিচের লিঙ্কে ক্লিক করে সফলভাবে আপডেট করে নিন!" }
+                                } else {
+                                    otaConfig.englishMessage.ifBlank { "To enjoy latest feature updates and premium lifetime data/image backup for free, click download below to update now!" }
+                                },
+                                fontSize = 12.sp,
+                                color = colors.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.End,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(otaConfig.updateDownloadUrl))
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // Fallback
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isBn) "ডাউনলোড ও আপডেট করুন" else "Download & Update",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Beautiful Shop Picture Header Banner Card
                 val shopPic = user?.shopPicture
                 if (!shopPic.isNullOrBlank()) {

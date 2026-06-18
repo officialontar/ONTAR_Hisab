@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,19 @@ class MainActivity : ComponentActivity() {
                 val currentUser by viewModel.currentUser.collectAsState()
                 val showRightMenuDrawer by viewModel.showRightMenuDrawer.collectAsState()
                 val userShops by viewModel.userShops.collectAsState()
+
+                if (currentScreen != "LOGIN") {
+                    BackHandler {
+                        if (showRightMenuDrawer) {
+                            viewModel.toggleRightMenuDrawer(false)
+                        } else if (currentScreen != "DASHBOARD") {
+                            viewModel.navigateTo("DASHBOARD")
+                        } else {
+                            val activity = (context as? android.app.Activity)
+                            activity?.finish()
+                        }
+                    }
+                }
 
                 // Password change dialog state
                 var showChangePinInDrawer by remember { mutableStateOf(false) }
@@ -190,7 +204,116 @@ class MainActivity : ComponentActivity() {
                             }
                         } ?: false
 
-                        if ((isBlocked || isDeviceBlocked) && currentScreen != "LOGIN") {
+                        val otaConfig by viewModel.otaConfig.collectAsState()
+                        val isForceUpdateBypassed by viewModel.isForceUpdateBypassed.collectAsState()
+                        val isUpdateRequired = otaConfig.latestVersionCode > 1
+                        val forceUpdateActive = isUpdateRequired && otaConfig.forceUpdateEnabled && !isForceUpdateBypassed && currentUser?.email != "mdanisujjamanontar@gmail.com"
+
+                        if (forceUpdateActive && currentScreen != "LOGIN") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                androidx.compose.material3.Card(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    ),
+                                    shape = RoundedCornerShape(24.dp),
+                                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(28.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Build,
+                                            contentDescription = "Update Required",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(72.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Text(
+                                            text = if (isBn) "নতুন একটি আধুনিক আপডেট উপলভ্য!" else "New Modern Update Available!",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 22.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = if (isBn) {
+                                                "দয়া করে অ্যাপ্লিকেশনটির সর্বশেষ এবং মসৃণ সংস্করণটিতে আপডেট করুন। নতুন সংস্করণগুলোতে কোনো প্রকার ল্যাগ বা বাগ ছাড়াই সকল প্রিমিয়াম ফিচার সচল রয়েছে!\n\nআপনার সংস্করণ: ১.০ (v1) | সর্বশেষ সংস্করণ: ${otaConfig.latestVersionName} (v${otaConfig.latestVersionCode})"
+                                            } else {
+                                                "Please update to the latest premium version of the app. All premium features are active in the latest builds with smooth lifetime backup support!\n\nYour Version: 1.0 (v1) | Latest Version: ${otaConfig.latestVersionName} (v${otaConfig.latestVersionCode})"
+                                            },
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        val dynamicMsg = if (isBn) otaConfig.bengaliMessage else otaConfig.englishMessage
+                                        if (dynamicMsg.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            androidx.compose.material3.Card(
+                                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(
+                                                    text = dynamicMsg,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                    modifier = Modifier.padding(12.dp).fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        Button(
+                                            onClick = {
+                                                try {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(otaConfig.updateDownloadUrl))
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "Could not open download link", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = if (isBn) "সবচেয়ে লেটেস্ট সংস্করণটি ডাউনলোড করুন" else "Download Latest Version",
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                viewModel.bypassForceUpdate()
+                                                Toast.makeText(
+                                                    context,
+                                                    if (isBn) "আগের সংস্করণটি সফলভাবে সচল রাখা হয়েছে!" else "Running the already installed version!",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        ) {
+                                            Text(
+                                                text = if (isBn) "আগের সংস্করণটি ব্যবহার করুন (যদি নতুনটি সাপোর্ট না করে)" else "Use Installed Version (if latest is unsupported)",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp,
+                                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if ((isBlocked || isDeviceBlocked) && currentScreen != "LOGIN") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -365,14 +488,74 @@ class MainActivity : ComponentActivity() {
                                                             fontWeight = FontWeight.ExtraBold,
                                                             color = colors.primary
                                                         )
-                                                        Spacer(modifier = Modifier.height(4.dp))
-                                                        val details = com.example.data.OwnerParser.getFormattedOwnersDetails(user.getLocalizedOwnerName(isBn), user.phone, user.email)
-                                                        Text(
-                                                            text = details,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            color = colors.onSurface.copy(alpha = 0.85f),
-                                                            fontWeight = FontWeight.Normal
-                                                        )
+                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                        
+                                                        val ownersList = com.example.data.OwnerParser.deserialize(user.getLocalizedOwnerName(isBn), user.phone, user.email)
+                                                        ownersList.forEachIndexed { idx, owner ->
+                                                            if (idx > 0) {
+                                                                Spacer(modifier = Modifier.height(10.dp))
+                                                                HorizontalDivider(color = colors.onSurface.copy(alpha = 0.08f))
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                            }
+                                                            if (owner.name.isNotBlank()) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    modifier = Modifier.padding(vertical = 2.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Person,
+                                                                        contentDescription = null,
+                                                                        tint = colors.primary.copy(alpha = 0.75f),
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                                    Text(
+                                                                        text = owner.name,
+                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                        color = colors.onSurface.copy(alpha = 0.9f),
+                                                                        fontWeight = FontWeight.Bold
+                                                                    )
+                                                                }
+                                                            }
+                                                            if (owner.phone.isNotBlank()) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    modifier = Modifier.padding(vertical = 2.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Phone,
+                                                                        contentDescription = null,
+                                                                        tint = colors.primary.copy(alpha = 0.75f),
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                                    Text(
+                                                                        text = owner.phone,
+                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                        color = colors.onSurface.copy(alpha = 0.75f)
+                                                                    )
+                                                                }
+                                                            }
+                                                            if (owner.email.isNotBlank()) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    modifier = Modifier.padding(vertical = 2.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Email,
+                                                                        contentDescription = null,
+                                                                        tint = colors.primary.copy(alpha = 0.75f),
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                                    Text(
+                                                                        text = owner.email,
+                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                        color = colors.onSurface.copy(alpha = 0.75f)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -539,6 +722,16 @@ class MainActivity : ComponentActivity() {
                                             onClick = { showChangePinInDrawer = true }
                                         )
 
+                                        // Data Recovery Support
+                                        MenuDrawerListItem(
+                                            icon = Icons.Default.Refresh,
+                                            title = if (isBn) "ডাটা ও ইমেজ রিকভারি" else "Recover Data & Images",
+                                            onClick = {
+                                                viewModel.toggleRightMenuDrawer(false)
+                                                viewModel.recoverAllCloudData()
+                                            }
+                                        )
+
                                         // Share link
                                         MenuDrawerListItem(
                                             icon = Icons.Default.Share,
@@ -679,24 +872,10 @@ class MainActivity : ComponentActivity() {
                                                     color = colors.primary
                                                 )
                                             }
-                                            val androidVer = android.os.Build.VERSION.RELEASE ?: "12"
-                                            val bnVer = androidVer.map { c ->
-                                                when (c) {
-                                                    '0' -> '০'
-                                                    '1' -> '১'
-                                                    '2' -> '২'
-                                                    '3' -> '৩'
-                                                    '4' -> '৪'
-                                                    '5' -> '৫'
-                                                    '6' -> '৬'
-                                                    '7' -> '৭'
-                                                    '8' -> '৮'
-                                                    '9' -> '৯'
-                                                    else -> c
-                                                }
-                                            }.joinToString("")
+                                            val appVer = "7.0.1"
+                                            val bnAppVer = "৭.০.১"
                                             Text(
-                                                text = if (isBn) "ভার্স ৭.০.$bnVer" else "Vers 7.0.$androidVer",
+                                                text = if (isBn) "ভার্সন $bnAppVer" else "Version $appVer",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = colors.onSurface.copy(alpha = 0.6f)
