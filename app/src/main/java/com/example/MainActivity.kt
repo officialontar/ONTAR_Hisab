@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
 
                 // Password change dialog state
                 var showChangePinInDrawer by remember { mutableStateOf(false) }
+                var showFirebaseSettingsDialog by remember { mutableStateOf(false) }
                 var oldPinInput by remember { mutableStateOf("") }
                 var newPinInput by remember { mutableStateOf("") }
                 var confirmPinInput by remember { mutableStateOf("") }
@@ -725,10 +726,21 @@ class MainActivity : ComponentActivity() {
                                         // Data Recovery Support
                                         MenuDrawerListItem(
                                             icon = Icons.Default.Refresh,
-                                            title = if (isBn) "ডাটা ও ইমেজ রিকভারি" else "Recover Data & Images",
+                                            title = if (isBn) "ফায়ারবেস ক্লাউড রিকভারি" else "Firebase Cloud Recovery",
                                             onClick = {
                                                 viewModel.toggleRightMenuDrawer(false)
                                                 viewModel.recoverAllCloudData()
+                                             }
+                                         )
+
+                                         // Firebase Cloud Connection Settings
+                                         MenuDrawerListItem(
+                                             icon = Icons.Default.Build,
+                                             title = if (isBn) "ফায়ারবেস ক্লাউড কানেকশন" else "Firebase Cloud Connection",
+                                             onClick = {
+                                                 viewModel.toggleRightMenuDrawer(false)
+                                                 showFirebaseSettingsDialog = true; run {
+                                             }
                                             }
                                         )
 
@@ -888,6 +900,122 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+
+                // FIREBASE DATABASE CONNECTION SETTINGS DIALOG
+                if (showFirebaseSettingsDialog) {
+                    val currentDbUrlVal by viewModel.dbUrl.collectAsState()
+                    var customDbUrlInput by remember { mutableStateOf(currentDbUrlVal) }
+
+                    AlertDialog(
+                        onDismissRequest = { showFirebaseSettingsDialog = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Build, null, tint = colors.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "ফায়ারবেস কানেকশন সেটিংস" else "Firebase Cloud Setup",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = if (isBn) "আপনার সুরক্ষার ও ডাটা হারানো রোধ করতে আপনার নিজস্ব ফায়ারবেস রিয়েলটাইম ডাটাবেজ লিংকটি নিচে সেট করুন।" 
+                                           else "Configure your own Firebase Realtime Database URL to enable private cloud backups and automated recovery.",
+                                    fontSize = 12.sp,
+                                    color = colors.onSurface.copy(alpha = 0.7f)
+                                )
+
+                                OutlinedTextField(
+                                    value = customDbUrlInput,
+                                    onValueChange = { customDbUrlInput = it },
+                                    label = { Text(if (isBn) "ফায়ারবেস ডাটাবেজ লিংক (URL)" else "Firebase RTDB URL") },
+                                    placeholder = { Text("https://your-project-id.firebaseio.com/") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.05f)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(
+                                            text = if (isBn) "কিভাবে নিজের ফায়ারবেস কানেক্ট করবেন:" else "How to Connect Your Firebase:",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = colors.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (isBn) {
+                                                "১. ব্রাউজারে firebase.google.com-এ যান এবং গুগল দিয়ে লগইন করুন।\n" +
+                                                "২. Go to Console-এ ক্লিক করে Add Project দিয়ে একটি প্রোজেক্ট ক্রিয়েট করুন।\n" +
+                                                "৩. বা-পাশের মেন্যু Build মেন্যু থেকে Realtime Database-এ গিয়ে Create Database ক্লিক করুন।\n" +
+                                                "৪. লোকেশন আপনার সুবিধা মতো দিয়ে Test Mode (Rules = true) সিলেক্ট করে ক্রিয়েট করুন।\n" +
+                                                "৫. রুলস (Rules) ট্যাবে গিয়ে নিশ্চিত করুন যে \".read\": true এবং \".write\": true করা আছে।\n" +
+                                                "৬. ডাটাবেজ স্ক্রিনের উপর থেকে লিংকটি (যা দেখতে https://...firebaseio.com/ এর মতো) কপি করুন এবং ওপরের বক্সে পেস্ট করে সেভ করুন।\n\n" +
+                                                "💡 এখন অ্যাপস আনইন্সটল করার পরে নতুন করে ইনস্টল দিলেও এই লিংকটি পেস্ট করে দিয়ে লগইন করলে আপনার সব ডাটা ও ছবি সাথে সাথে পুনরায় ফিরে আসবে!"
+                                            } else {
+                                                "1. Go to firebase.google.com & log in with Gmail.\n" +
+                                                "2. Click 'Go to Console' & select 'Add Project' to create a project.\n" +
+                                                "3. Go to 'Realtime Database' (under Build) & click 'Create Database'.\n" +
+                                                "4. Choose location and enable in Test Mode (Rules set to true).\n" +
+                                                "5. Check Rules tab to ensure \".read\": true and \".write\": true are configured.\n" +
+                                                "6. Copy the URL from database dashboard and paste here to save!"
+                                            },
+                                            fontSize = 11.sp,
+                                            lineHeight = 16.sp,
+                                            color = colors.onSurface.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.updateFirebaseUrl("https://ontar-hisab-default-rtdb.firebaseio.com/")
+                                        showFirebaseSettingsDialog = false
+                                    }
+                                ) {
+                                    Text(
+                                        text = if (isBn) "ডিফল্ট লিংক" else "Reset Default",
+                                        color = colors.onSurface.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Row {
+                                    TextButton(onClick = { showFirebaseSettingsDialog = false }) {
+                                        Text(text = if (isBn) "বাতিল" else "Cancel")
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Button(
+                                        onClick = {
+                                            viewModel.updateFirebaseUrl(customDbUrlInput)
+                                            showFirebaseSettingsDialog = false
+                                        },
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(text = if (isBn) "সেভ করুন" else "Save Settings")
+                                    }
+                                }
+                            }
+                        }
+                    )
                 }
 
                 // PASSWORD CHANGE DIALOG

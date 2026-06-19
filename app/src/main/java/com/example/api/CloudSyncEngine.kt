@@ -9,6 +9,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
+import android.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 
@@ -25,8 +30,18 @@ data class SyncPayload(
 
 object CloudSyncEngine {
     private const val TAG = "CloudSyncEngine"
-    private const val BUCKET_ID = "6h9NTtLDbTocxLkyC7Jpv6"
-    private const val BASE_URL = "https://kvdb.io/$BUCKET_ID/"
+    private var dynamicBaseUrl: String = "https://ontar-hisab-default-rtdb.firebaseio.com/"
+
+    fun initialize(url: String) {
+        val clean = url.trim()
+        if (clean.isNotBlank()) {
+            dynamicBaseUrl = if (clean.endsWith("/")) clean else "$clean/"
+        }
+    }
+
+    private fun getBaseUrl(): String {
+        return dynamicBaseUrl
+    }
 
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -35,9 +50,9 @@ object CloudSyncEngine {
     private val payloadAdapter = moshi.adapter(SyncPayload::class.java)
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(4, TimeUnit.SECONDS)
-        .writeTimeout(4, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .writeTimeout(25, TimeUnit.SECONDS)
         .build()
 
     private fun getSanitizedKey(email: String): String {
@@ -58,13 +73,56 @@ object CloudSyncEngine {
             .filter { it.isLetterOrDigit() || it == '_' }
     }
 
+    private fun compress(str: String): String {
+        val bos = ByteArrayOutputStream()
+        GZIPOutputStream(bos).use { gzos ->
+            gzos.write(str.toByteArray(Charsets.UTF_8))
+        }
+        return Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+    }
+
+    private fun decompress(compressedStr: String): String {
+        val bytes = Base64.decode(compressedStr, Base64.NO_WRAP)
+        val bis = ByteArrayInputStream(bytes)
+        val gis = GZIPInputStream(bis)
+        val bos = ByteArrayOutputStream()
+        val buffer = ByteArray(1024)
+        var len: Int
+        while (gis.read(buffer).also { len = it } > 0) {
+            bos.write(buffer, 0, len)
+        }
+        return bos.toString("UTF-8")
+    }
+
     private fun fetchPayloadByUrl(url: String): SyncPayload? {
         return try {
             val request = Request.Builder().url(url).get().build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val json = response.body?.string() ?: return null
-                    payloadAdapter.fromJson(json)
+                    val rawBody = response.body?.string() ?: return null
+                    val cleanRaw = rawBody.trim()
+                    if (cleanRaw.isEmpty() || cleanRaw == "null") return null
+                    
+                    val jsonToParse = if (cleanRaw.startsWith("{") || cleanRaw.startsWith("[")) {
+                        cleanRaw
+                    } else {
+                        val unquoted = if (cleanRaw.startsWith("\"") && cleanRaw.endsWith("\"") && cleanRaw.length >= 2) {
+                            cleanRaw.substring(1, cleanRaw.length - 1)
+                                .replace("\\\\", "\\")
+                                .replace("\\\"", "\"")
+                                .replace("\\n", "\n")
+                                .replace("\\r", "\r")
+                        } else {
+                            cleanRaw
+                        }
+                        try {
+                            decompress(unquoted)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Gzip decompression failed, falling back to raw body", e)
+                            unquoted
+                        }
+                    }
+                    payloadAdapter.fromJson(jsonToParse)
                 } else {
                     null
                 }
@@ -80,7 +138,15 @@ object CloudSyncEngine {
             val request = Request.Builder().url(url).get().build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    response.body?.string()?.trim()
+                    val raw = response.body?.string()?.trim() ?: return null
+                    if (raw == "null" || raw.isEmpty()) return null
+                    if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length >= 2) {
+                        raw.substring(1, raw.length - 1)
+                            .replace("\\\\", "\\")
+                            .replace("\\\"", "\"")
+                    } else {
+                        raw
+                    }
                 } else {
                     null
                 }
@@ -92,37 +158,51 @@ object CloudSyncEngine {
     }
 
     /**
-     * Upload payload to custom key-value cloud store
+     * Upload payload to Firebase cloud store
      */
     suspend fun uploadPayload(email: String, payload: SyncPayload): Boolean {
         if (email.isBlank()) return false
         val key = getSanitizedKey(email)
-        val url = "$BASE_URL$key"
+        val url = "${getBaseUrl()}users/$key.json"
 
         val uploadDirectSuccess = try {
             val json = payloadAdapter.toJson(payload)
-            val requestBody = json.toRequestBody("text/plain".toMediaType())
+            val compressedPayload = try {
+                compress(json)
+            } catch (e: Exception) {
+                Log.e(TAG, "Gzip compression failed, falling back to raw json", e)
+                json
+            }
+
+            // Wrap as a safe and valid JSON string format for Realtime Database
+            val escaped = compressedPayload
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+            val jsonString = "\"$escaped\""
+            
+            val requestBody = jsonString.toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url(url)
-                .post(requestBody)
+                .put(requestBody)
                 .build()
 
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    Log.d(TAG, "Uploaded sync payload successfully for $email")
+                    Log.d(TAG, "Uploaded sync payload successfully to Firebase for $email (Compressed: ${compressedPayload.length} chars, Original: ${json.length} chars)")
                     true
                 } else {
-                    Log.e(TAG, "Failed to upload sync payload: Code ${response.code}")
+                    Log.e(TAG, "Failed to upload sync payload to Firebase: Code ${response.code}")
                     false
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Network exception uploading sync payload", e)
+            Log.e(TAG, "Network exception uploading sync payload to Firebase", e)
             false
         }
 
         if (uploadDirectSuccess) {
-            // Background thread-friendly mapping creation
             try {
                 uploadRedirectsForUser(payload.user)
             } catch (e: Exception) {
@@ -180,15 +260,17 @@ object CloudSyncEngine {
                 Log.e(TAG, "Failed to parse owner names for redirect upload", e)
             }
 
-            // Upload redirect keys to kvdb.io in parallel/asynchronously
+            // Upload redirect keys to Firebase in parallel/asynchronously
             redirectIdentifiers.forEach { id ->
                 val redirectKey = getSanitizedRedirectKey(id)
-                val url = "$BASE_URL$redirectKey"
+                val url = "${getBaseUrl()}users/$redirectKey.json"
                 try {
-                    val requestBody = primaryEmail.toRequestBody("text/plain".toMediaType())
+                    val escapedEmail = primaryEmail.replace("\\", "\\\\").replace("\"", "\\\"")
+                    val jsonString = "\"$escapedEmail\""
+                    val requestBody = jsonString.toRequestBody("application/json".toMediaType())
                     val request = Request.Builder()
                         .url(url)
-                        .post(requestBody)
+                        .put(requestBody)
                         .build()
 
                     okHttpClient.newCall(request).execute().use { response ->
@@ -206,7 +288,7 @@ object CloudSyncEngine {
     }
 
     /**
-     * Download payload from custom key-value cloud store with redirection support
+     * Download payload from Firebase cloud store with redirection support
      */
     suspend fun downloadPayload(email: String): SyncPayload? = coroutineScope {
         if (email.isBlank()) return@coroutineScope null
@@ -215,17 +297,17 @@ object CloudSyncEngine {
         // 1. Try reading directly first
         val directDeferred = async(Dispatchers.IO) {
             val directKey = getSanitizedKey(trimmedRaw)
-            val directUrl = "$BASE_URL$directKey"
+            val directUrl = "${getBaseUrl()}users/$directKey.json"
             fetchPayloadByUrl(directUrl)
         }
 
         // 2. Try redirect key mapping
         val redirectDeferred = async(Dispatchers.IO) {
             val redirectKey = getSanitizedRedirectKey(trimmedRaw)
-            val redirectUrl = "$BASE_URL$redirectKey"
+            val redirectUrl = "${getBaseUrl()}users/$redirectKey.json"
             val redirectedEmail = fetchStringByUrl(redirectUrl)
             if (!redirectedEmail.isNullOrBlank()) {
-                val resolvedUrl = "$BASE_URL${getSanitizedKey(redirectedEmail)}"
+                val resolvedUrl = "${getBaseUrl()}users/${getSanitizedKey(redirectedEmail)}.json"
                 fetchPayloadByUrl(resolvedUrl)
             } else {
                 null
@@ -238,10 +320,10 @@ object CloudSyncEngine {
             if (ultraCleanRaw.length >= 11) {
                 val shortPhone = ultraCleanRaw.takeLast(11)
                 val shortRedirectKey = getSanitizedRedirectKey(shortPhone)
-                val shortRedirectUrl = "$BASE_URL$shortRedirectKey"
+                val shortRedirectUrl = "${getBaseUrl()}users/$shortRedirectKey.json"
                 val shortRedirectedEmail = fetchStringByUrl(shortRedirectUrl)
                 if (!shortRedirectedEmail.isNullOrBlank()) {
-                    val resolvedUrl = "$BASE_URL${getSanitizedKey(shortRedirectedEmail)}"
+                    val resolvedUrl = "${getBaseUrl()}users/${getSanitizedKey(shortRedirectedEmail)}.json"
                     fetchPayloadByUrl(resolvedUrl)
                 } else null
             } else null
@@ -266,23 +348,21 @@ object CloudSyncEngine {
     suspend fun fetchAllRegisteredUsers(): List<User> = coroutineScope {
         val list = java.util.Collections.synchronizedList(mutableListOf<User>())
         try {
-            val url = BASE_URL
+            val url = "${getBaseUrl()}users.json?shallow=true"
             val request = Request.Builder().url(url).get().build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val raw = response.body?.string() ?: return@coroutineScope emptyList()
+                    if (raw == "null" || raw.trim().isEmpty()) return@coroutineScope emptyList()
                     
-                    // Support standard plaintext newline formats as well as JSON listings
-                    val cleanRaw = raw.replace("[", "").replace("]", "")
-                    val keys = cleanRaw.split(Regex("[\n\r,]+"))
-                        .map { it.replace("\"", "").trim() }
-                        .filter { it.startsWith("user_") && it.isNotBlank() }
-                        .distinct()
+                    // Parse keys from JSON object like {"user_foo": true, "user_bar": true}
+                    val regex = Regex("\"(user_[a-zA-Z0-9_]+)\"")
+                    val keys = regex.findAll(raw).map { it.groupValues[1] }.toList().distinct()
                     
                     val deferreds = keys.map { key ->
                         async(Dispatchers.IO) {
                             try {
-                                val userPayloadUrl = "$BASE_URL$key"
+                                val userPayloadUrl = "${getBaseUrl()}users/$key.json"
                                 val payload = fetchPayloadByUrl(userPayloadUrl)
                                 if (payload != null) {
                                     list.add(payload.user)
@@ -296,18 +376,18 @@ object CloudSyncEngine {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to list keys from kvdb.io", e)
+            Log.e(TAG, "Failed to list keys from Firebase shallow option", e)
         }
         list.toList()
     }
 
     /**
-     * Delete user payload from kvdb.io
+     * Delete user payload from Firebase
      */
     suspend fun deletePayload(email: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             val key = getSanitizedKey(email)
-            val url = "$BASE_URL$key"
+            val url = "${getBaseUrl()}users/$key.json"
             val request = Request.Builder()
                 .url(url)
                 .delete()
@@ -316,55 +396,73 @@ object CloudSyncEngine {
                 response.isSuccessful
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Network exception deleting sync payload", e)
+            Log.e(TAG, "Network exception deleting sync payload from Firebase", e)
             false
         }
     }
 
     /**
-     * Upload an individual image to its own key on kvdb.io to avoid bloating the main payload
+     * Upload an individual image to its own key on Firebase to avoid bloating the main payload
      */
     suspend fun uploadIndividualImage(imageKey: String, base64Data: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (imageKey.isBlank() || base64Data.isBlank()) return@withContext false
-        val url = "$BASE_URL$imageKey"
+        val url = "${getBaseUrl()}images/$imageKey.json"
         try {
-            val requestBody = base64Data.toRequestBody("text/plain".toMediaType())
+            val escaped = base64Data
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+            val jsonString = "\"$escaped\""
+            
+            val requestBody = jsonString.toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url(url)
-                .post(requestBody)
+                .put(requestBody)
                 .build()
+
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    Log.d(TAG, "Uploaded individual image successfully for key: $imageKey")
+                    Log.d(TAG, "Uploaded individual image successfully to Firebase for key: $imageKey")
                     true
                 } else {
-                    Log.e(TAG, "Failed to upload individual image: Code ${response.code}")
+                    Log.e(TAG, "Failed to upload individual image to Firebase: Code ${response.code}")
                     false
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception uploading individual image: $imageKey", e)
+            Log.e(TAG, "Exception uploading individual image to Firebase: $imageKey", e)
             false
         }
     }
 
     /**
-     * Download an individual image base64 resource from its own key on kvdb.io
+     * Download an individual image base64 resource from its own key on Firebase
      */
     suspend fun downloadIndividualImage(imageKey: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (imageKey.isBlank()) return@withContext null
-        val url = "$BASE_URL$imageKey"
+        val url = "${getBaseUrl()}images/$imageKey.json"
         try {
             val request = Request.Builder().url(url).get().build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    response.body?.string()?.trim()
+                    val rawStr = response.body?.string()?.trim() ?: return@withContext null
+                    if (rawStr == "null" || rawStr.isEmpty()) return@withContext null
+                    if (rawStr.startsWith("\"") && rawStr.endsWith("\"") && rawStr.length >= 2) {
+                        rawStr.substring(1, rawStr.length - 1)
+                            .replace("\\\\", "\\")
+                            .replace("\\\"", "\"")
+                            .replace("\\n", "\n")
+                            .replace("\\r", "\r")
+                    } else {
+                        rawStr
+                    }
                 } else {
                     null
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception downloading individual image: $imageKey", e)
+            Log.e(TAG, "Exception downloading individual image from Firebase: $imageKey", e)
             null
         }
     }

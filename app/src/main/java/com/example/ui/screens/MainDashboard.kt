@@ -44,6 +44,7 @@ fun MainDashboard(viewModel: AppViewModel) {
     val isBn by viewModel.isBengali.collectAsState()
     val isDark by viewModel.isDarkMode.collectAsState()
     val user by viewModel.currentUser.collectAsState()
+    val lastSyncTime by viewModel.lastSyncTime.collectAsState()
 
     // PIN change dialogue variables
     var showChangePinDialog by remember { mutableStateOf(false) }
@@ -1027,6 +1028,10 @@ fun MainDashboard(viewModel: AppViewModel) {
     val netProfit = transactionsFlow.sumOf { it.profit }
     val totalDues = customersFlow.sumOf { it.totalDue }
     val totalOwed = dealersFlow.sumOf { it.totalOwed }
+    val cList = customersFlow
+    val dList = dealersFlow
+    val sList = itemsFlow
+    val tList = transactionsFlow
 
     Scaffold(
         topBar = {
@@ -1107,6 +1112,26 @@ fun MainDashboard(viewModel: AppViewModel) {
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (lastSyncTime > 0) Color(0xFF0F9D58) else Color(0xFFE91E63))
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = formatDashboardSyncTime(lastSyncTime, isBn),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (lastSyncTime > 0) Color(0xFF0F9D58) else colors.onSurface.copy(alpha = 0.6f),
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
 
@@ -1469,7 +1494,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         DashboardItemCard(
                             title = Translator.get("customer_ledger", isBn),
-                            subtitle = if (isBn) "কার কাছে কত টাকা বাকি আছে" else "Dues reminders & payments",
+                            subtitle = if (isBn) "মোট কাস্টমার: ${cList.size} জন | বাকি রয়েছে: ${cList.count { it.totalDue > 0 }} জনের" else "Total Customers: ${cList.size} | Dues: ${cList.count { it.totalDue > 0 }}",
                             icon = Icons.Default.AccountCircle,
                             cardColor = Color(0xFFC5A000),
                             testTag = "btn_customer_ledger",
@@ -1480,7 +1505,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                         Spacer(modifier = Modifier.width(12.dp))
                         DashboardItemCard(
                             title = Translator.get("dealer_ledger", isBn),
-                            subtitle = if (isBn) "ডিলারের পাওনা হিসাব খাতা" else "Dealer lists & payouts",
+                            subtitle = if (isBn) "মোট ডিলার: ${dList.size} জন | পাওনা রয়েছে: ${dList.count { it.totalOwed > 0 }} জনের" else "Total Dealers: ${dList.size} | Owed: ${dList.count { it.totalOwed > 0 }}",
                             icon = Icons.Default.Home,
                             cardColor = Color(0xFF8E24AA),
                             testTag = "btn_dealer_ledger",
@@ -1751,6 +1776,30 @@ fun ActivityLogItem(
             )
         }
     }
+}
+
+fun formatDashboardSyncTime(timestamp: Long, isBn: Boolean): String {
+    if (timestamp == 0L) return if (isBn) "কখনো ব্যাকআপ করা হয়নি" else "Last Backup: Never"
+    val sdf = SimpleDateFormat("hh:mm a", Locale.US)
+    val formatted = sdf.format(Date(timestamp))
+    if (!isBn) return "Last Backup: $formatted"
+    
+    val bnTime = formatted
+        .replace("1", "১")
+        .replace("2", "২")
+        .replace("3", "৩")
+        .replace("4", "৪")
+        .replace("5", "৫")
+        .replace("6", "৬")
+        .replace("7", "৭")
+        .replace("8", "৮")
+        .replace("9", "৯")
+        .replace("0", "০")
+        .replace("AM", "পূর্বাহ্ণ")
+        .replace("PM", "অপরাহ্ন")
+        .replace("am", "পূর্বাহ্ণ")
+        .replace("pm", "অপরাহ্ন")
+    return "সবশেষ ব্যাকআপ: $bnTime"
 }
 
 
