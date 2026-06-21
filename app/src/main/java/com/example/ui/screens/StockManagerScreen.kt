@@ -514,9 +514,9 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                     confirmButton = {
                         Button(
                             onClick = {
-                                val buy = buyPriceText.toDoubleOrNull() ?: 0.0
-                                val sell = sellPriceText.toDoubleOrNull() ?: 0.0
-                                val quant = quantityText.toIntOrNull() ?: 0
+                                val buy = viewModel.parseDoubleRobust(buyPriceText)
+                                val sell = viewModel.parseDoubleRobust(sellPriceText)
+                                val quant = viewModel.parseIntRobust(quantityText)
                                 val photoVal = if (stockPhotoUri.isBlank()) null else stockPhotoUri
                                 viewModel.addStockItem(
                                     name = itemName.trim(),
@@ -805,9 +805,9 @@ fun StockManagerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val current = itemToEditProfile
-                                val buy = editItemBuyPrice.toDoubleOrNull() ?: 0.0
-                                val sell = editItemSellPrice.toDoubleOrNull() ?: 0.0
-                                val quant = editItemQuantity.toIntOrNull() ?: 0
+                                val buy = viewModel.parseDoubleRobust(editItemBuyPrice)
+                                val sell = viewModel.parseDoubleRobust(editItemSellPrice)
+                                val quant = viewModel.parseIntRobust(editItemQuantity)
                                 if (current != null && editItemName.isNotBlank()) {
                                     viewModel.updateStockItemProfile(
                                         item = current,

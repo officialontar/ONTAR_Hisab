@@ -30,7 +30,7 @@ data class SyncPayload(
 
 object CloudSyncEngine {
     private const val TAG = "CloudSyncEngine"
-    private var dynamicBaseUrl: String = "https://ontar-hisab-default-rtdb.firebaseio.com/"
+    private var dynamicBaseUrl: String = "https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/"
 
     fun initialize(url: String) {
         val clean = url.trim()
@@ -464,6 +464,33 @@ object CloudSyncEngine {
         } catch (e: Exception) {
             Log.e(TAG, "Exception downloading individual image from Firebase: $imageKey", e)
             null
+        }
+    }
+
+    /**
+     * Delete user mapping redirect for clean update of logins
+     */
+    suspend fun deleteRedirect(id: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (id.isBlank()) return@withContext false
+        val redirectKey = getSanitizedRedirectKey(id)
+        val url = "${getBaseUrl()}users/$redirectKey.json"
+        try {
+            val request = Request.Builder()
+                .url(url)
+                .delete()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    Log.d(TAG, "Deleted user mapping redirect for $id")
+                    true
+                } else {
+                    Log.e(TAG, "Failed to delete redirect for $id, code ${response.code}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception deleting user mapping redirect for $id", e)
+            false
         }
     }
 }

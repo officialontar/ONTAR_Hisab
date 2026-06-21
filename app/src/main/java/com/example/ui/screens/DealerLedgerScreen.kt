@@ -815,7 +815,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val photoVal = if (dealerPhotoUri.isBlank()) null else dealerPhotoUri
-                                val balanceVal = initialOwedAmountText.toDoubleOrNull() ?: 0.0
+                                val balanceVal = viewModel.parseDoubleRobust(initialOwedAmountText)
                                 val finalInitialOwed = if (initialOwedStatusIsDebt) balanceVal else -balanceVal
                                 viewModel.addDealer(dealerName.trim(), dealerPhone.trim(), companyName.trim(), photoVal, finalInitialOwed)
                                 showAddDealerDialog = false
@@ -1167,7 +1167,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val d = selectedDealerForPayout
-                                val amt = payoutAmountText.toDoubleOrNull() ?: 0.0
+                                val amt = viewModel.parseDoubleRobust(payoutAmountText)
                                 if (d != null && amt > 0) {
                                     viewModel.recordDealerPayment(d, amt)
                                 }
@@ -1226,7 +1226,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val d = selectedDealerForPurchase
-                                val amtOwed = purchaseAmountText.toDoubleOrNull() ?: 0.0
+                                val amtOwed = viewModel.parseDoubleRobust(purchaseAmountText)
                                 if (d != null && amtOwed > 0) {
                                     viewModel.recordDealerPurchase(d, amtOwed, purchaseNotesText.trim())
                                 }

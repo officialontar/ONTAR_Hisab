@@ -164,7 +164,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     val isBengali: StateFlow<Boolean> = _isBengali.asStateFlow()
 
     // Dynamic Firebase Database Connection URL
-    private val _dbUrl = MutableStateFlow(prefs.getString("firebase_db_url", "https://ontar-hisab-default-rtdb.firebaseio.com/") ?: "https://ontar-hisab-default-rtdb.firebaseio.com/")
+    private val _dbUrl = MutableStateFlow(prefs.getString("firebase_db_url", "https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/") ?: "https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/")
     val dbUrl: StateFlow<String> = _dbUrl.asStateFlow()
 
     fun updateFirebaseUrl(newUrl: String) {
@@ -556,7 +556,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     }
 
     init {
-        val savedDbUrl = prefs.getString("firebase_db_url", "https://ontar-hisab-default-rtdb.firebaseio.com/") ?: "https://ontar-hisab-default-rtdb.firebaseio.com/"
+        val savedDbUrl = prefs.getString("firebase_db_url", "https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/") ?: "https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/"
         com.example.api.CloudSyncEngine.initialize(savedDbUrl)
         fetchGlobalOtaConfig()
         // Session Auto-Login check on startup
@@ -594,10 +594,10 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             }
         }
 
-        // Periodic Cloud Sync Loop: Automatically sync every 30 seconds
+        // Periodic Cloud Sync Loop: Automatically sync every 20 seconds for robust real-time multi-device collaboration
         viewModelScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(30000)
+                kotlinx.coroutines.delay(20000)
                 fetchGlobalOtaConfig()
                 if (_currentUser.value != null && !_isCloudSyncing.value) {
                     try {
@@ -864,17 +864,44 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 activeArr.put(currentDevice)
                             }
                             
+                            val finalProfile = if (isLocalImageMatchingRef(user.profilePicture, remoteUser.profilePicture, "profile", user.email)) {
+                                user.profilePicture
+                            } else {
+                                remoteUser.profilePicture
+                            }
+                            
+                            val finalShopPic = if (isLocalImageMatchingRef(user.shopPicture, remoteUser.shopPicture, "shop", user.email)) {
+                                user.shopPicture
+                            } else {
+                                remoteUser.shopPicture
+                            }
+
                             val updatedUser = remoteUser.copy(
+                                profilePicture = finalProfile,
+                                shopPicture = finalShopPic,
                                 activeDevicesJson = activeArr.toString(),
                                 registerDevice = remoteUser.registerDevice ?: currentDevice,
                                 isBlocked = false // safety
                             )
                             
-                            repository.updateUser(updatedUser)
-                            activeUser = updatedUser
-                            
-                            withContext(Dispatchers.Main) {
-                                _currentUser.value = updatedUser
+                            val hasDifference = user.shopName != updatedUser.shopName ||
+                                    user.phone != updatedUser.phone ||
+                                    user.ownerName != updatedUser.ownerName ||
+                                    user.profilePicture != updatedUser.profilePicture ||
+                                    user.shopPicture != updatedUser.shopPicture ||
+                                    user.passwordHash != updatedUser.passwordHash ||
+                                    user.activeDevicesJson != updatedUser.activeDevicesJson ||
+                                    user.registerDevice != updatedUser.registerDevice ||
+                                    user.isBlocked != updatedUser.isBlocked
+
+                            if (hasDifference) {
+                                repository.updateUser(updatedUser)
+                                activeUser = updatedUser
+                                withContext(Dispatchers.Main) {
+                                    _currentUser.value = updatedUser
+                                }
+                            } else {
+                                activeUser = user
                             }
                         }
                     }
@@ -909,6 +936,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
                         val isRemoteNewer = remotePayload.timestamp > lastLocalDbMutationTime
 
+                        if (isRemoteNewer) {
                         // --- MERGING STOCK ITEMS ---
                         val allStockNames = (localStock.map { it.name } + remotePayload.stockItems.map { it.name }).distinct()
                         for (name in allStockNames) {
@@ -916,15 +944,30 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                             val remoteItem = remotePayload.stockItems.find { it.name == name }
                             if (localItem != null && remoteItem != null) {
                                 if (isRemoteNewer) {
-                                    // Sync remote values to local to keep devices matching
-                                    val updated = localItem.copy(
-                                        purchasePrice = remoteItem.purchasePrice,
-                                        salesPrice = remoteItem.salesPrice,
-                                        stockCount = remoteItem.stockCount,
-                                        category = remoteItem.category,
-                                        unit = remoteItem.unit
-                                    )
-                                    repository.updateStockItem(updated)
+                                    val finalImg = if (isLocalImageMatchingRef(localItem.imageResName, remoteItem.imageResName, "stock_${localItem.id}", user.email)) {
+                                        localItem.imageResName
+                                    } else {
+                                        remoteItem.imageResName
+                                    }
+                                    
+                                    val hasDiff = localItem.purchasePrice != remoteItem.purchasePrice ||
+                                            localItem.salesPrice != remoteItem.salesPrice ||
+                                            localItem.stockCount != remoteItem.stockCount ||
+                                            localItem.category != remoteItem.category ||
+                                            localItem.unit != remoteItem.unit ||
+                                            localItem.imageResName != finalImg
+
+                                    if (hasDiff) {
+                                        val updated = localItem.copy(
+                                            purchasePrice = remoteItem.purchasePrice,
+                                            salesPrice = remoteItem.salesPrice,
+                                            stockCount = remoteItem.stockCount,
+                                            category = remoteItem.category,
+                                            unit = remoteItem.unit,
+                                            imageResName = finalImg
+                                        )
+                                        repository.updateStockItem(updated)
+                                    }
                                 }
                             } else if (remoteItem != null) {
                                 // Insert remote item to local DB
@@ -943,7 +986,11 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 it.phone.trim() == remoteCust.phone.trim() 
                             }
                             if (matchingLocal != null) {
-                                val finalPhoto = resolveBestPhoto(matchingLocal.photoUri, remoteCust.photoUri)
+                                val finalPhoto = if (isLocalImageMatchingRef(matchingLocal.photoUri, remoteCust.photoUri, "cust_${matchingLocal.phone.filter { it.isLetterOrDigit() }}", user.email)) {
+                                    matchingLocal.photoUri
+                                } else {
+                                    resolveBestPhoto(matchingLocal.photoUri, remoteCust.photoUri)
+                                }
 
                                 val finalAddress = if (!matchingLocal.address.isNullOrBlank()) {
                                     matchingLocal.address
@@ -955,12 +1002,18 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
                                 val finalDue = if (isRemoteNewer) remoteCust.totalDue else matchingLocal.totalDue
 
+                                val hasDiff = matchingLocal.address != finalAddress ||
+                                        matchingLocal.totalDue != finalDue ||
+                                        matchingLocal.photoUri != finalPhoto
+
                                 val updated = matchingLocal.copy(
                                     address = finalAddress,
                                     totalDue = finalDue,
                                     photoUri = finalPhoto
                                 )
-                                repository.updateCustomer(updated)
+                                if (hasDiff) {
+                                    repository.updateCustomer(updated)
+                                }
                                 remoteCustomerMap[remoteCust.id] = updated.id
                             } else {
                                 val newCust = remoteCust.copy(id = 0, userEmail = user.email)
@@ -986,7 +1039,11 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                                 it.phone.trim() == remoteDlr.phone.trim()
                             }
                             if (matchingLocal != null) {
-                                val finalDlrPhoto = resolveBestPhoto(matchingLocal.photoUri, remoteDlr.photoUri)
+                                val finalDlrPhoto = if (isLocalImageMatchingRef(matchingLocal.photoUri, remoteDlr.photoUri, "dlr_${matchingLocal.phone.filter { it.isLetterOrDigit() }}", user.email)) {
+                                    matchingLocal.photoUri
+                                } else {
+                                    resolveBestPhoto(matchingLocal.photoUri, remoteDlr.photoUri)
+                                }
 
                                 val finalCompany = if (!matchingLocal.company.isNullOrBlank()) {
                                     matchingLocal.company
@@ -998,12 +1055,18 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
                                 val finalOwed = if (isRemoteNewer) remoteDlr.totalOwed else matchingLocal.totalOwed
 
+                                val hasDiff = matchingLocal.company != finalCompany ||
+                                        matchingLocal.totalOwed != finalOwed ||
+                                        matchingLocal.photoUri != finalDlrPhoto
+
                                 val updated = matchingLocal.copy(
                                     company = finalCompany,
                                     totalOwed = finalOwed,
                                     photoUri = finalDlrPhoto
                                 )
-                                repository.updateDealer(updated)
+                                if (hasDiff) {
+                                    repository.updateDealer(updated)
+                                }
                                 remoteDealerMap[remoteDlr.id] = updated.id
                             } else {
                                 val newDlr = remoteDlr.copy(id = 0, userEmail = user.email)
@@ -1044,6 +1107,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
                         // Fire off background worker to download actual base64 image strings for remote references
                         downloadRemoteImagesInBackground(user.email)
+                        }
                     }
                 }
 
@@ -1146,6 +1210,123 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     }
 
     // --- USER REGISTRATION & LOGIN ---
+    /**
+     * Checks if any of the given emails or phones are already in use by any user OTHER than the specified excludingEmail.
+     * Returns a localized error message in Bengali/English if taken, or null if perfectly free.
+     */
+    suspend fun getCollisionErrorForUser(
+        excludingEmail: String?, // email of the user we are currently updating (null for new registrations)
+        ownerName: String,
+        phone: String,
+        email: String
+    ): String? {
+        val currentReqOwners = com.example.data.OwnerParser.deserialize(ownerName, phone, email)
+        val currentReqEmails = currentReqOwners.map { it.email.trim().lowercase() }.filter { it.isNotEmpty() }
+        val currentReqPhones = currentReqOwners.map { 
+            it.phone.trim().lowercase().replace("-", "").replace(" ", "").replace("+", "") 
+        }.filter { it.isNotEmpty() }
+
+        // Check self-duplication inside the form fields
+        if (currentReqEmails.distinct().size != currentReqEmails.size) {
+            return if (_isBengali.value) "একই ইমেইল একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same email cannot be used for multiple partners!"
+        }
+        if (currentReqPhones.distinct().size != currentReqPhones.size) {
+            return if (_isBengali.value) "একই মোবাইল নম্বর একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same phone number cannot be used for multiple partners!"
+        }
+
+        // Fetch all registered users from Cloud and Local
+        val allCloudUsers = try {
+            com.example.api.CloudSyncEngine.fetchAllRegisteredUsers()
+        } catch (e: Exception) {
+            emptyList<User>()
+        }
+        val allLocalUsers = repository.getAllUsers()
+        
+        // Filter out the excludingEmail
+        val combinedUsers = (allCloudUsers + allLocalUsers)
+            .distinctBy { it.email.trim().lowercase() }
+            .filter { excludingEmail == null || it.email.trim().lowercase() != excludingEmail.trim().lowercase() }
+
+        val takenEmails = mutableSetOf<String>()
+        val takenPhones = mutableSetOf<String>()
+
+        combinedUsers.forEach { u ->
+            val owners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
+            owners.forEach { o ->
+                if (o.email.trim().isNotBlank()) {
+                    takenEmails.add(o.email.trim().lowercase())
+                }
+                if (o.phone.trim().isNotBlank()) {
+                    o.phone.split(",").forEach { individualPhone ->
+                        val clean = individualPhone.trim().lowercase().replace("-", "").replace(" ", "").replace("+", "")
+                        if (clean.isNotBlank()) {
+                            takenPhones.add(clean)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Verify if any of our requested emails/phones are already taken!
+        for (em in currentReqEmails) {
+            if (takenEmails.contains(em)) {
+                return if (_isBengali.value) "ইমেইলটি ($em) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Email ($em) already registered in system!"
+            }
+        }
+
+        for (ph in currentReqPhones) {
+            if (takenPhones.contains(ph)) {
+                return if (_isBengali.value) "ফোন নম্বরটি ($ph) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Phone ($ph) already registered in system!"
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Clean up redirects from firebase for identifiers that have been deleted or freed during the update
+     */
+    suspend fun cleanupOldRedirects(oldUser: User?, newUser: User) {
+        if (oldUser == null) return
+        try {
+            val oldOwners = com.example.data.OwnerParser.deserialize(oldUser.ownerName, oldUser.phone, oldUser.email)
+            val oldIdentifiers = mutableSetOf<String>()
+            oldIdentifiers.add(oldUser.email.trim().lowercase())
+            oldOwners.forEach { o ->
+                if (o.email.trim().isNotEmpty()) oldIdentifiers.add(o.email.trim().lowercase())
+                o.phone.split(",").forEach { p ->
+                    val clean = p.trim().lowercase().replace("-", "").replace(" ", "").replace("+", "")
+                    if (clean.isNotEmpty()) {
+                        oldIdentifiers.add(clean)
+                        if (clean.length >= 11) oldIdentifiers.add(clean.takeLast(11))
+                    }
+                }
+            }
+
+            val newOwners = com.example.data.OwnerParser.deserialize(newUser.ownerName, newUser.phone, newUser.email)
+            val newIdentifiers = mutableSetOf<String>()
+            newIdentifiers.add(newUser.email.trim().lowercase())
+            newOwners.forEach { o ->
+                if (o.email.trim().isNotEmpty()) newIdentifiers.add(o.email.trim().lowercase())
+                o.phone.split(",").forEach { p ->
+                    val clean = p.trim().lowercase().replace("-", "").replace(" ", "").replace("+", "")
+                    if (clean.isNotEmpty()) {
+                        newIdentifiers.add(clean)
+                        if (clean.length >= 11) newIdentifiers.add(clean.takeLast(11))
+                    }
+                }
+            }
+
+            // Deleted ones:
+            val deleted = oldIdentifiers - newIdentifiers
+            deleted.forEach { id ->
+                com.example.api.CloudSyncEngine.deleteRedirect(id)
+            }
+        } catch (e: Exception) {
+            Log.e("AppViewModel", "Failed to cleanup old redirects", e)
+        }
+    }
+
     fun registerNewUser(
         shopName: String,
         ownerName: String,
@@ -1162,65 +1343,17 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val currentReqOwners = com.example.data.OwnerParser.deserialize(ownerName, phone, email)
-                val currentReqEmails = currentReqOwners.map { it.email.trim().lowercase() }.filter { it.isNotEmpty() }
-                val currentReqPhones = currentReqOwners.map { 
-                    it.phone.trim().lowercase().replace("-", "").replace(" ", "") 
-                }.filter { it.isNotEmpty() }
-
-                // Check self-duplication inside the form
-                if (currentReqEmails.distinct().size != currentReqEmails.size) {
-                    _authStateMessage.value = if (_isBengali.value) "একই ইমেইল একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same email cannot be used for multiple partners!"
+                _authStateMessage.value = if (_isBengali.value) "যাচাই করা হচ্ছে..." else "Verifying registration details..."
+                
+                val error = getCollisionErrorForUser(
+                    excludingEmail = null,
+                    ownerName = ownerName,
+                    phone = phone,
+                    email = email
+                )
+                if (error != null) {
+                    _authStateMessage.value = error
                     return@launch
-                }
-                if (currentReqPhones.distinct().size != currentReqPhones.size) {
-                    _authStateMessage.value = if (_isBengali.value) "একই মোবাইল নম্বর একাধিক অংশীদারের জন্য ব্যবহার করা যাবে না!" else "Same phone number cannot be used for multiple partners!"
-                    return@launch
-                }
-
-                // 2. Fetch all registered users from Cloud and Local to extract all taken emails and phones
-                val allCloudUsers = try {
-                    com.example.api.CloudSyncEngine.fetchAllRegisteredUsers()
-                } catch (e: Exception) {
-                    emptyList<User>()
-                }
-                val allLocalUsers = repository.getAllUsers()
-                val combinedUsers = (allCloudUsers + allLocalUsers).distinctBy { it.email.trim().lowercase() }
-
-                val takenEmails = mutableSetOf<String>()
-                val takenPhones = mutableSetOf<String>()
-
-                combinedUsers.forEach { u ->
-                    val owners = com.example.data.OwnerParser.deserialize(u.ownerName, u.phone, u.email)
-                    owners.forEach { o ->
-                        if (o.email.trim().isNotBlank()) {
-                            takenEmails.add(o.email.trim().lowercase())
-                        }
-                        if (o.phone.trim().isNotBlank()) {
-                            // clean any spaces, dashes, commas
-                            o.phone.split(",").forEach { individualPhone ->
-                                val clean = individualPhone.trim().lowercase().replace("-", "").replace(" ", "")
-                                if (clean.isNotBlank()) {
-                                    takenPhones.add(clean)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Now verify if any of our requested emails/phones are already taken!
-                for (em in currentReqEmails) {
-                    if (takenEmails.contains(em)) {
-                        _authStateMessage.value = if (_isBengali.value) "ইমেইলটি ($em) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Email ($em) already registered in system!"
-                        return@launch
-                    }
-                }
-
-                for (ph in currentReqPhones) {
-                    if (takenPhones.contains(ph)) {
-                        _authStateMessage.value = if (_isBengali.value) "ফোন নম্বরটি ($ph) ইতিমধ্যে কোনো অ্যাকাউন্টে ব্যবহৃত হয়েছে!" else "Phone ($ph) already registered in system!"
-                        return@launch
-                    }
                 }
 
                 val newUser = User(
@@ -1349,14 +1482,31 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         val oldUser = _currentUser.value
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Perform robust, unified validation checking both local and cloud databases
+                val collisionError = getCollisionErrorForUser(
+                    excludingEmail = oldUser?.email,
+                    ownerName = ownerName.trim(),
+                    phone = phone.trim(),
+                    email = targetEmail
+                )
+                if (collisionError != null) {
+                    withContext(Dispatchers.Main) {
+                        showToast(collisionError)
+                    }
+                    return@launch
+                }
+
+                val finalProfileRef = uploadImageIfBase64(targetEmail, profilePic, "profile")
+                val finalShopRef = uploadImageIfBase64(targetEmail, shopPic, "shop")
+
                 val updatedUser = User(
                     email = targetEmail,
                     shopName = shopName.trim(),
                     phone = phone.trim(),
                     passwordHash = pin.trim(),
-                    profilePicture = profilePic,
+                    profilePicture = finalProfileRef ?: profilePic,
                     ownerName = ownerName.trim(),
-                    shopPicture = shopPic,
+                    shopPicture = finalShopRef ?: shopPic,
                     ipAddress = oldUser?.ipAddress,
                     registerLocation = oldUser?.registerLocation,
                     registerDevice = oldUser?.registerDevice,
@@ -1365,32 +1515,21 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     isBlocked = oldUser?.isBlocked ?: false
                 )
 
-                if (oldUser != null && oldUser.email != targetEmail) {
-                    // Check if new email is already taken
-                    val existing = repository.getUser(targetEmail)
-                    if (existing != null) {
-                        withContext(Dispatchers.Main) {
-                            showToast(if (_isBengali.value) "এই ইমেইলটি ইতিমধ্যে অন্য দোকানে ব্যবহৃত হয়েছে!" else "This email is already in use by another shop!")
-                        }
-                        return@launch
-                    }
+                if (oldUser != null && oldUser.email.trim().lowercase() != targetEmail.lowercase()) {
                     // Register new user record
                     repository.registerUser(updatedUser)
                     // Cascade update references
-                    repository.updateStockItemEmail(oldUser.email, targetEmail)
-                    repository.updateCustomerEmail(oldUser.email, targetEmail)
-                    repository.updateDealerEmail(oldUser.email, targetEmail)
-                    repository.updateTransactionEmail(oldUser.email, targetEmail)
+                    repository.updateStockItemEmail(oldUser.email.trim(), targetEmail)
+                    repository.updateCustomerEmail(oldUser.email.trim(), targetEmail)
+                    repository.updateDealerEmail(oldUser.email.trim(), targetEmail)
+                    repository.updateTransactionEmail(oldUser.email.trim(), targetEmail)
                     // Delete old user record
-                    repository.deleteUserByEmail(oldUser.email)
+                    repository.deleteUserByEmail(oldUser.email.trim())
                 } else {
                     repository.updateUser(updatedUser)
                 }
 
-                _currentUser.value = updatedUser
-                lastProfileUpdateTime = System.currentTimeMillis()
-
-                // Sync updated user to Cloud Sync bucket by using local datasets directly (instantaneous)
+                // Sync and upload Payload to Cloud
                 val finalStock = repository.getStockItems(targetEmail).firstOrNull() ?: emptyList()
                 val finalCustomers = repository.getCustomers(targetEmail).firstOrNull() ?: emptyList()
                 val finalDealers = repository.getDealers(targetEmail).firstOrNull() ?: emptyList()
@@ -1411,10 +1550,27 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     registrationTimestamp = existingPayload?.registrationTimestamp ?: existingPayload?.timestamp ?: System.currentTimeMillis(),
                     additionalShops = additionalShops
                 )
-                com.example.api.CloudSyncEngine.uploadPayload(targetEmail, newPayload)
+                
+                val uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(targetEmail, newPayload)
+                
+                // Cleanup old redirects if emails/phones changed
+                cleanupOldRedirects(oldUser, updatedUser)
+
+                if (oldUser != null && oldUser.email.trim().lowercase() != targetEmail.lowercase()) {
+                    if (uploadSuccess) {
+                        com.example.api.CloudSyncEngine.deletePayload(oldUser.email.trim())
+                    }
+                }
+
+                _currentUser.value = updatedUser
+                lastProfileUpdateTime = System.currentTimeMillis()
 
                 withContext(Dispatchers.Main) {
-                    showToast(if (_isBengali.value) "প্রোফাইল সফলভাবে আপডেট ও সিন্ক্রোনাইজ করা হয়েছে!" else "Profile updated and synchronized successfully!")
+                    if (uploadSuccess) {
+                        showToast(if (_isBengali.value) "প্রোফাইল সফলভাবে আপডেট ও সিন্ক্রোনাইজ করা হয়েছে!" else "Profile updated and synchronized successfully!")
+                    } else {
+                        showToast(if (_isBengali.value) "স্থানীয়ভাবে সেভ হয়েছে কিন্তু ক্লাউড আপডেট ব্যর্থ হয়েছে" else "Saved locally but cloud update failed")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("AppViewModel", "Profile update error", e)
@@ -1427,44 +1583,127 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
     fun adminUpdateUserProfileAndSync(
         targetUser: User,
+        oldEmail: String,
         onComplete: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Update locally first in local DB
-                repository.updateUser(targetUser)
-                
-                // Update on Cloud KVDB.io
-                val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetUser.email)
-                val newPayload = if (cloudPayload != null) {
-                    cloudPayload.copy(
-                        user = targetUser,
-                        timestamp = System.currentTimeMillis(),
-                        registrationTimestamp = cloudPayload.registrationTimestamp ?: cloudPayload.timestamp
-                    )
-                } else {
-                    com.example.api.SyncPayload(
-                        user = targetUser,
-                        stockItems = emptyList(),
-                        customers = emptyList(),
-                        dealers = emptyList(),
-                        transactions = emptyList(),
-                        timestamp = System.currentTimeMillis(),
-                        registrationTimestamp = System.currentTimeMillis()
-                    )
+                val originalUser = repository.getUser(oldEmail.trim())
+
+                // Unified robust duplicate verification
+                val collisionError = getCollisionErrorForUser(
+                    excludingEmail = oldEmail.trim(),
+                    ownerName = targetUser.ownerName ?: "",
+                    phone = targetUser.phone,
+                    email = targetUser.email
+                )
+                if (collisionError != null) {
+                    withContext(Dispatchers.Main) {
+                        onComplete(false, collisionError)
+                    }
+                    return@launch
                 }
-                val success = com.example.api.CloudSyncEngine.uploadPayload(targetUser.email, newPayload)
+
+                val isEmailChanged = oldEmail.lowercase().trim() != targetUser.email.lowercase().trim()
+
+                // Optimize profile & shop pictures before upload
+                val finalProfileRef = uploadImageIfBase64(targetUser.email, targetUser.profilePicture, "profile")
+                val finalShopRef = uploadImageIfBase64(targetUser.email, targetUser.shopPicture, "shop")
                 
-                // If it is our current user, update their state
-                if (_currentUser.value?.email?.lowercase() == targetUser.email.lowercase()) {
+                val cloudUser = targetUser.copy(
+                    profilePicture = finalProfileRef ?: targetUser.profilePicture,
+                    shopPicture = finalShopRef ?: targetUser.shopPicture
+                )
+
+                // Update local database
+                if (isEmailChanged) {
+                    // Register user under the new email key
+                    repository.registerUser(cloudUser)
+                    
+                    // Cascade update references in local tables
+                    repository.updateStockItemEmail(oldEmail.trim(), targetUser.email.trim())
+                    repository.updateCustomerEmail(oldEmail.trim(), targetUser.email.trim())
+                    repository.updateDealerEmail(oldEmail.trim(), targetUser.email.trim())
+                    repository.updateTransactionEmail(oldEmail.trim(), targetUser.email.trim())
+                    
+                    // Remove old local user entry
+                    repository.deleteUserByEmail(oldEmail.trim())
+                } else {
+                    repository.updateUser(cloudUser)
+                }
+
+                // Sync and upload Payload to Cloud
+                var uploadSuccess = false
+                if (isEmailChanged) {
+                    val oldPayload = com.example.api.CloudSyncEngine.downloadPayload(oldEmail.trim())
+                    val newPayload = if (oldPayload != null) {
+                        val updatedStock = oldPayload.stockItems.map { it.copy(userEmail = targetUser.email.trim()) }
+                        val updatedCustomers = oldPayload.customers.map { it.copy(userEmail = targetUser.email.trim()) }
+                        val updatedDealers = oldPayload.dealers.map { it.copy(userEmail = targetUser.email.trim()) }
+                        val updatedTransactions = oldPayload.transactions.map { it.copy(userEmail = targetUser.email.trim()) }
+                        
+                        oldPayload.copy(
+                            user = cloudUser,
+                            stockItems = updatedStock,
+                            customers = updatedCustomers,
+                            dealers = updatedDealers,
+                            transactions = updatedTransactions,
+                            timestamp = System.currentTimeMillis(),
+                            registrationTimestamp = oldPayload.registrationTimestamp ?: oldPayload.timestamp
+                        )
+                    } else {
+                        com.example.api.SyncPayload(
+                            user = cloudUser,
+                            stockItems = repository.getStockItems(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            customers = repository.getCustomers(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            dealers = repository.getDealers(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            transactions = repository.getTransactions(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            timestamp = System.currentTimeMillis(),
+                            registrationTimestamp = System.currentTimeMillis()
+                        )
+                    }
+                    
+                    uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(targetUser.email.trim(), newPayload)
+                    if (uploadSuccess) {
+                        // Safe to delete old payload on the cloud
+                        com.example.api.CloudSyncEngine.deletePayload(oldEmail.trim())
+                    }
+                } else {
+                    val cloudPayload = com.example.api.CloudSyncEngine.downloadPayload(targetUser.email.trim())
+                    val newPayload = if (cloudPayload != null) {
+                        cloudPayload.copy(
+                            user = cloudUser,
+                            timestamp = System.currentTimeMillis(),
+                            registrationTimestamp = cloudPayload.registrationTimestamp ?: cloudPayload.timestamp
+                        )
+                    } else {
+                        com.example.api.SyncPayload(
+                            user = cloudUser,
+                            stockItems = repository.getStockItems(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            customers = repository.getCustomers(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            dealers = repository.getDealers(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            transactions = repository.getTransactions(targetUser.email.trim()).firstOrNull() ?: emptyList(),
+                            timestamp = System.currentTimeMillis(),
+                            registrationTimestamp = System.currentTimeMillis()
+                        )
+                    }
+                    uploadSuccess = com.example.api.CloudSyncEngine.uploadPayload(targetUser.email.trim(), newPayload)
+                }
+
+                // Cleanup old redirects if fields changed
+                cleanupOldRedirects(originalUser, cloudUser)
+
+                // If it is our current logged-in user, update their state
+                val currentEmail = _currentUser.value?.email?.lowercase()?.trim()
+                if (currentEmail == oldEmail.lowercase().trim() || currentEmail == targetUser.email.lowercase().trim()) {
                     lastProfileUpdateTime = System.currentTimeMillis()
                     withContext(Dispatchers.Main) {
                         _currentUser.value = targetUser
                     }
                 }
-                
+
                 withContext(Dispatchers.Main) {
-                    if (success) {
+                    if (uploadSuccess) {
                         onComplete(true, if (_isBengali.value) "সাফল্যের সাথে তথ্য আপডেট করা হয়েছে এবং ক্লাউডে সিঙ্ক হয়েছে!" else "Successfully updated information and synced to cloud!")
                     } else {
                         onComplete(true, if (_isBengali.value) "স্থানীয়ভাবে সফলভাবে সেভ হয়েছে কিন্তু ক্লাউড আপডেট ব্যর্থ হয়েছে" else "Successfully updated locally but cloud write failed")
@@ -1783,13 +2022,13 @@ class AppViewModel(val repository: AppRepository, private val application: andro
 
                         // Restore stock items
                         try {
-                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0)) }
+                            cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0, userEmail = cloudUser.email)) }
                         } catch (e: Exception) { Log.e("AppViewModel", "Admin stock restore fail", e) }
 
                         // Restore customers
                         val localCustomerMap = mutableMapOf<Int, Int>()
                         try {
-                            cloudPayload.customers.forEach { repository.insertCustomer(it.copy(id = 0)) }
+                            cloudPayload.customers.forEach { repository.insertCustomer(it.copy(id = 0, userEmail = cloudUser.email)) }
                             val freshCustomers = repository.getCustomers(cloudUser.email).firstOrNull() ?: emptyList()
                             cloudPayload.customers.forEach { remoteC ->
                                 val matchingL = freshCustomers.find {
@@ -1805,7 +2044,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                         // Restore dealers
                         val localDealerMap = mutableMapOf<Int, Int>()
                         try {
-                            cloudPayload.dealers.forEach { repository.insertDealer(it.copy(id = 0)) }
+                            cloudPayload.dealers.forEach { repository.insertDealer(it.copy(id = 0, userEmail = cloudUser.email)) }
                             val freshDealers = repository.getDealers(cloudUser.email).firstOrNull() ?: emptyList()
                             cloudPayload.dealers.forEach { remoteD ->
                                 val matchingL = freshDealers.find {
@@ -1823,7 +2062,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                             cloudPayload.transactions.forEach { tx ->
                                 val localCustId = tx.customerId?.let { localCustomerMap[it] }
                                 val localDlrId = tx.dealerId?.let { localDealerMap[it] }
-                                repository.insertTransaction(tx.copy(id = 0, customerId = localCustId, dealerId = localDlrId))
+                                repository.insertTransaction(tx.copy(id = 0, userEmail = cloudUser.email, customerId = localCustId, dealerId = localDlrId))
                             }
                         } catch (e: Exception) { Log.e("AppViewModel", "Admin transactions restore fail", e) }
 
@@ -2271,6 +2510,54 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         }
     }
 
+    fun parseDoubleRobust(input: String): Double {
+        val banglaDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+        val englishDigits = charArrayOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+        var clean = input.trim()
+        for (i in 0..9) {
+            clean = clean.replace(banglaDigits[i], englishDigits[i])
+        }
+        clean = clean.replace(",", "").replace(" ", "")
+        return clean.toDoubleOrNull() ?: 0.0
+    }
+
+    fun parseIntRobust(input: String): Int {
+        val banglaDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+        val englishDigits = charArrayOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+        var clean = input.trim()
+        for (i in 0..9) {
+            clean = clean.replace(banglaDigits[i], englishDigits[i])
+        }
+        clean = clean.replace(",", "").replace(" ", "")
+        return clean.toIntOrNull() ?: 0
+    }
+
+    fun roundToTwoDecimals(value: Double): Double {
+        return try {
+            String.format(java.util.Locale.US, "%.2f", value).toDoubleOrNull() ?: value
+        } catch (e: Exception) {
+            value
+        }
+    }
+
+    fun isLocalImageMatchingRef(local: String?, remote: String?, extraSeed: String, userEmail: String): Boolean {
+        if (local == null || remote == null) return false
+        if (!remote.startsWith("remote_ref:")) return false
+        val remoteKey = remote.substringAfter("remote_ref:")
+        
+        // If local is already equal to remote remote_ref
+        if (local.startsWith("remote_ref:")) {
+            return local == remote
+        }
+        
+        // Compute key for local base64
+        val sanitizedEmail = userEmail.lowercase().trim().replace("@", "_at_").replace(".", "_dot_").filter { it.isLetterOrDigit() || it == '_' }
+        val absHash = java.lang.Math.abs(local.hashCode())
+        val computedKey = "img_${sanitizedEmail}_${extraSeed}_h${absHash}_len${local.length}".lowercase().filter { it.isLetterOrDigit() || it == '_' }
+        
+        return computedKey == remoteKey
+    }
+
     // --- SALES & BILLING (টালি ও বিক্রি) ---
     fun recordSale(item: StockItem, quantityToSell: Int, customerId: Int? = null) {
         val email = _currentUser.value?.email ?: return
@@ -2308,7 +2595,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 val currentCustomers = repository.getCustomers(email).firstOrNull() ?: emptyList()
                 val matched = currentCustomers.find { it.id == customerId }
                 if (matched != null) {
-                    val updatedCustomer = matched.copy(totalDue = matched.totalDue + saleAmount)
+                    val updatedCustomer = matched.copy(totalDue = roundToTwoDecimals(matched.totalDue + saleAmount))
                     repository.updateCustomer(updatedCustomer)
                 }
             }
@@ -2373,7 +2660,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // Update customer balance due (it reduces because they paid)
-            val updated = customer.copy(totalDue = customer.totalDue - amountPaid)
+            val updated = customer.copy(totalDue = roundToTwoDecimals(customer.totalDue - amountPaid))
             repository.updateCustomer(updated)
 
             // Save deposit transaction
@@ -2401,7 +2688,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // Update customer total due
-            val updated = customer.copy(totalDue = customer.totalDue + dueAmount)
+            val updated = customer.copy(totalDue = roundToTwoDecimals(customer.totalDue + dueAmount))
             repository.updateCustomer(updated)
 
             // Save transaction record
@@ -2481,7 +2768,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // We reduce the debt we owe to them
-            val updated = dealer.copy(totalOwed = dealer.totalOwed - amountPaid)
+            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed - amountPaid))
             repository.updateDealer(updated)
 
             // Save payment transaction
@@ -2509,7 +2796,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
         markLocalMutation()
         viewModelScope.launch(Dispatchers.IO) {
             // We increase the debt we owe to them
-            val updated = dealer.copy(totalOwed = dealer.totalOwed + amountOwed)
+            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed + amountOwed))
             repository.updateDealer(updated)
 
             // Save purchase transaction

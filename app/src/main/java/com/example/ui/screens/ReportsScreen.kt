@@ -337,7 +337,7 @@ fun ReportsScreen(viewModel: AppViewModel) {
                 confirmButton = {
                     Button(
                         onClick = {
-                            val amt = expenseAmountText.toDoubleOrNull() ?: 0.0
+                            val amt = viewModel.parseDoubleRobust(expenseAmountText)
                             if (expenseName.isNotBlank() && amt > 0) {
                                 viewModel.recordExpense(expenseName.trim(), amt, expenseNote.trim())
                             }

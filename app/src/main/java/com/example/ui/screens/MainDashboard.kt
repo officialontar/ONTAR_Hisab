@@ -46,6 +46,11 @@ fun MainDashboard(viewModel: AppViewModel) {
     val user by viewModel.currentUser.collectAsState()
     val lastSyncTime by viewModel.lastSyncTime.collectAsState()
 
+    // Trigger near-instant sync when dashboard is loaded/opened
+    LaunchedEffect(Unit) {
+        viewModel.triggerCloudSync(isManual = false)
+    }
+
     // PIN change dialogue variables
     var showChangePinDialog by remember { mutableStateOf(false) }
     var currentOldPinInput by remember { mutableStateOf("") }
@@ -54,38 +59,29 @@ fun MainDashboard(viewModel: AppViewModel) {
 
     // Profile Update Dialogue Variables
     var showProfileSettingsDialog by remember { mutableStateOf(false) }
-    var editShopName by remember(user) { mutableStateOf(user?.shopName ?: "") }
-    var editOwnerName by remember(user) { mutableStateOf(user?.ownerName ?: "") }
-    var editPhone by remember(user) { mutableStateOf(user?.phone ?: "") }
-    var editEmail by remember(user) { mutableStateOf(user?.email ?: "") }
-    var editPin by remember(user) { mutableStateOf(user?.passwordHash ?: "") }
-    var editShopPicture by remember(user) { mutableStateOf(user?.shopPicture ?: "") }
-    var editOwnerPicture by remember(user) { mutableStateOf(user?.profilePicture ?: "") }
+    var editShopName by remember { mutableStateOf("") }
+    var editOwnerName by remember { mutableStateOf("") }
+    var editPhone by remember { mutableStateOf("") }
+    var editEmail by remember { mutableStateOf("") }
+    var editPin by remember { mutableStateOf("") }
+    var editShopPicture by remember { mutableStateOf("") }
+    var editOwnerPicture by remember { mutableStateOf("") }
 
-    var editOwnershipType by remember(user) {
-        val nameStr = user?.ownerName ?: ""
-        mutableStateOf(if (nameStr.trim().startsWith("[")) "joint" else "single")
-    }
-    
-    val initialOwners = remember(user) {
-        com.example.data.OwnerParser.deserialize(user?.ownerName, user?.phone ?: "", user?.email ?: "")
-    }
+    var editOwnershipType by remember { mutableStateOf("single") }
 
-    var editJointCount by remember(initialOwners) {
-        mutableStateOf(if (initialOwners.size >= 3) 3 else 2)
-    }
+    var editJointCount by remember { mutableStateOf(2) }
 
-    var editJointName1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.name ?: "") }
-    var editJointPhone1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.phone ?: "") }
-    var editJointEmail1 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(0)?.email ?: "") }
+    var editJointName1 by remember { mutableStateOf("") }
+    var editJointPhone1 by remember { mutableStateOf("") }
+    var editJointEmail1 by remember { mutableStateOf("") }
 
-    var editJointName2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.name ?: "") }
-    var editJointPhone2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.phone ?: "") }
-    var editJointEmail2 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(1)?.email ?: "") }
+    var editJointName2 by remember { mutableStateOf("") }
+    var editJointPhone2 by remember { mutableStateOf("") }
+    var editJointEmail2 by remember { mutableStateOf("") }
 
-    var editJointName3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.name ?: "") }
-    var editJointPhone3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.phone ?: "") }
-    var editJointEmail3 by remember(initialOwners) { mutableStateOf(initialOwners.getOrNull(2)?.email ?: "") }
+    var editJointName3 by remember { mutableStateOf("") }
+    var editJointPhone3 by remember { mutableStateOf("") }
+    var editJointEmail3 by remember { mutableStateOf("") }
 
 
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -131,7 +127,7 @@ fun MainDashboard(viewModel: AppViewModel) {
     }
 
     // Financial Metrics Flows
-    LaunchedEffect(showProfileSettingsDialog, user) {
+    LaunchedEffect(showProfileSettingsDialog) {
         if (showProfileSettingsDialog && user != null) {
             editShopName = user?.getLocalizedShopName(isBn) ?: ""
             editOwnerName = user?.getLocalizedOwnerName(isBn) ?: ""
@@ -1137,33 +1133,6 @@ fun MainDashboard(viewModel: AppViewModel) {
 
                     // Headers action
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Cloud synchronizer
-                        IconButton(
-                            onClick = { viewModel.triggerCloudSync() },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(colors.primary.copy(alpha = 0.1f))
-                                .testTag("cloud_sync_icon")
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colors.primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    tint = Color(0xFF0F9D58),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
                         // Quit
                         IconButton(
                             onClick = { viewModel.logout() },

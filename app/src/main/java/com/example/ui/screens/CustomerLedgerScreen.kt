@@ -924,7 +924,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val photoValue = if (customerPhotoUri.isBlank()) null else customerPhotoUri
-                                val balanceAmount = initialBalanceText.toDoubleOrNull() ?: 0.0
+                                val balanceAmount = viewModel.parseDoubleRobust(initialBalanceText)
                                 val finalInitialDue = if (initialStatusIsDue) balanceAmount else -balanceAmount
                                 viewModel.addCustomer(customerName.trim(), customerPhone.trim(), customerAddress.trim(), photoValue, finalInitialDue)
                                 showAddCustomerDialog = false
@@ -1277,7 +1277,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val cust = selectedCustomerForDeposit
-                                val valDeposit = depositAmountText.toDoubleOrNull() ?: 0.0
+                                val valDeposit = viewModel.parseDoubleRobust(depositAmountText)
                                 if (cust != null && valDeposit > 0) {
                                     viewModel.recordCustomerPayment(cust, valDeposit)
                                 }
@@ -1471,7 +1471,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                         Button(
                             onClick = {
                                 val cust = selectedCustomerForNewDue
-                                val addedDue = newDueAmountText.toDoubleOrNull() ?: 0.0
+                                val addedDue = viewModel.parseDoubleRobust(newDueAmountText)
                                 if (cust != null && addedDue > 0) {
                                     viewModel.recordCustomerCustomDue(cust, addedDue, customDueReasonText.trim())
                                 }

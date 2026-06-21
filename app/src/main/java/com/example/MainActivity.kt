@@ -453,8 +453,34 @@ class MainActivity : ComponentActivity() {
                                                     color = colors.primary
                                                 )
                                             }
-                                            IconButton(onClick = { viewModel.toggleRightMenuDrawer(false) }) {
-                                                Icon(Icons.Default.Close, null)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                val isSyncing by viewModel.isCloudSyncing.collectAsState()
+                                                IconButton(
+                                                    onClick = { viewModel.triggerCloudSync() },
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    if (isSyncing) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(16.dp),
+                                                            strokeWidth = 2.dp,
+                                                            color = colors.primary
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Refresh,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF0F9D58),
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                IconButton(
+                                                    onClick = { viewModel.toggleRightMenuDrawer(false) },
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, null)
+                                                }
                                             }
                                         }
 
@@ -739,10 +765,9 @@ class MainActivity : ComponentActivity() {
                                              title = if (isBn) "ফায়ারবেস ক্লাউড কানেকশন" else "Firebase Cloud Connection",
                                              onClick = {
                                                  viewModel.toggleRightMenuDrawer(false)
-                                                 showFirebaseSettingsDialog = true; run {
+                                                 showFirebaseSettingsDialog = true
                                              }
-                                            }
-                                        )
+                                         )
 
                                         // Share link
                                         MenuDrawerListItem(
@@ -988,7 +1013,7 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 TextButton(
                                     onClick = {
-                                        viewModel.updateFirebaseUrl("https://ontar-hisab-default-rtdb.firebaseio.com/")
+                                        viewModel.updateFirebaseUrl("https://ontar-hisab-eb1ea-default-rtdb.firebaseio.com/")
                                         showFirebaseSettingsDialog = false
                                     }
                                 ) {

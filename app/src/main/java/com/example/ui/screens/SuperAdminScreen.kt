@@ -1347,7 +1347,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                             } else {
                                                 isLoading = true
                                                 val updatedUser = user.copy(isBlocked = !user.isBlocked).also { o -> userList = userList.map { if (it.email.trim().lowercase() == user.email.trim().lowercase()) o else it } }
-                                                viewModel.adminUpdateUserProfileAndSync(updatedUser) { success, msg ->
+                                                viewModel.adminUpdateUserProfileAndSync(updatedUser, user.email) { success, msg ->
                                                     isLoading = false
                                                     feedbackMessage = msg
                                                     refreshData()
@@ -2032,7 +2032,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                 shopPicture = editShopPic.ifBlank { null }
                             )
                             
-                            viewModel.adminUpdateUserProfileAndSync(updatedUser) { success, msg ->
+                            viewModel.adminUpdateUserProfileAndSync(updatedUser, original.email) { success, msg ->
                                 isLoading = false
                                 feedbackMessage = msg
                                 refreshData()
@@ -2358,7 +2358,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                 blockedDevicesJson = org.json.JSONArray(blockedDevs.toList()).toString()
                             )
                             
-                            viewModel.adminUpdateUserProfileAndSync(updatedUser) { success, msg ->
+                            viewModel.adminUpdateUserProfileAndSync(updatedUser, currentUserState.email) { success, msg ->
                                 isLoading = false
                                 feedbackMessage = msg
                                 refreshData()

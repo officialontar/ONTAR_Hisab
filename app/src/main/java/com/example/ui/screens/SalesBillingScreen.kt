@@ -42,9 +42,9 @@ fun SalesBillingScreen(viewModel: AppViewModel) {
     var customerDropdownExpanded by remember { mutableStateOf(false) }
 
     // Computations
-    val quantity = quantityText.toIntOrNull() ?: 1
+    val quantity = viewModel.parseIntRobust(quantityText)
     val unitPrice = selectedItem?.salesPrice ?: 0.0
-    val totalPrice = unitPrice * quantity
+    val totalPrice = unitPrice * (if (quantity <= 0) 1 else quantity)
 
     Scaffold(
         topBar = {
