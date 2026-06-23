@@ -43,6 +43,9 @@ interface AppDao {
     @Query("SELECT * FROM stock_items WHERE userEmail = :userEmail ORDER BY name ASC")
     fun getStockItemsOfUser(userEmail: String): Flow<List<StockItem>>
 
+    @Query("SELECT * FROM stock_items WHERE userEmail = :userEmail ORDER BY name ASC")
+    suspend fun getStockItemsOfUserList(userEmail: String): List<StockItem>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStockItem(item: StockItem): Long
 
@@ -55,6 +58,9 @@ interface AppDao {
     // --- CUSTOMER QUERIES ---
     @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY name ASC")
     fun getCustomersOfUser(userEmail: String): Flow<List<Customer>>
+
+    @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY name ASC")
+    suspend fun getCustomersOfUserList(userEmail: String): List<Customer>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer): Long
@@ -69,6 +75,9 @@ interface AppDao {
     @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY name ASC")
     fun getDealersOfUser(userEmail: String): Flow<List<Dealer>>
 
+    @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY name ASC")
+    suspend fun getDealersOfUserList(userEmail: String): List<Dealer>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDealer(dealer: Dealer): Long
 
@@ -81,6 +90,9 @@ interface AppDao {
     // --- TRANSACTION QUERIES ---
     @Query("SELECT * FROM transactions WHERE userEmail = :userEmail ORDER BY timestamp DESC")
     fun getTransactionsOfUser(userEmail: String): Flow<List<TransactionRecord>>
+
+    @Query("SELECT * FROM transactions WHERE userEmail = :userEmail ORDER BY timestamp DESC")
+    suspend fun getTransactionsOfUserList(userEmail: String): List<TransactionRecord>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: TransactionRecord): Long

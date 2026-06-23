@@ -61,6 +61,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
     var dealerPhotoUri by remember { mutableStateOf("") }
     var initialOwedAmountText by remember { mutableStateOf("") }
     var initialOwedStatusIsDebt by remember { mutableStateOf(true) } // true: দেনা / debt, false: অগ্রিম / advance
+    var dealerInitialDetailsText by remember { mutableStateOf("") }
 
     // Search query state
     var searchQuery by remember { mutableStateOf("") }
@@ -227,6 +228,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     dealerPhotoUri = ""
                     initialOwedAmountText = ""
                     initialOwedStatusIsDebt = true
+                    dealerInitialDetailsText = ""
                     showAddDealerDialog = true
                 },
                 containerColor = colors.primary,
@@ -605,7 +607,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                 )
                             }
 
-                            OutlinedTextField(
+                             OutlinedTextField(
                                 value = initialOwedAmountText,
                                 onValueChange = { initialOwedAmountText = it },
                                 label = { Text(if (isBn) "টাকার পরিমাণ" else "Starting Amount") },
@@ -615,6 +617,18 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
                                     .testTag("input_dealer_initial_owed")
+                            )
+
+                            OutlinedTextField(
+                                value = dealerInitialDetailsText,
+                                onValueChange = { dealerInitialDetailsText = it },
+                                label = { Text(if (isBn) "কী কী মালামাল কিনলাম বা কী কী ফেরত দিলাম (অপশনাল)" else "Details of Items Purchased / Returned (Optional)") },
+                                leadingIcon = { Icon(Icons.Default.Info, null) },
+                                singleLine = false,
+                                maxLines = 3,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                             )
 
                             Spacer(modifier = Modifier.height(10.dp))
@@ -817,7 +831,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                 val photoVal = if (dealerPhotoUri.isBlank()) null else dealerPhotoUri
                                 val balanceVal = viewModel.parseDoubleRobust(initialOwedAmountText)
                                 val finalInitialOwed = if (initialOwedStatusIsDebt) balanceVal else -balanceVal
-                                viewModel.addDealer(dealerName.trim(), dealerPhone.trim(), companyName.trim(), photoVal, finalInitialOwed)
+                                viewModel.addDealer(dealerName.trim(), dealerPhone.trim(), companyName.trim(), photoVal, finalInitialOwed, dealerInitialDetailsText.trim())
                                 showAddDealerDialog = false
                             },
                             modifier = Modifier.testTag("btn_save_dealer")
@@ -1266,13 +1280,20 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                         val earliestTimestamp = filtered.firstOrNull()?.timestamp ?: System.currentTimeMillis()
                         val openingTimestamp = earliestTimestamp - 60000L // 1 minute before earliest subsequent transaction
                         
+                        val baseDesc = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance"
+                        val finalDesc = if (!dealer.initialDetails.isNullOrBlank()) {
+                            "$baseDesc\n(${dealer.initialDetails})"
+                        } else {
+                            baseDesc
+                        }
+
                         val openingTx = com.example.data.TransactionRecord(
                             id = -999,
                             userEmail = dealer.userEmail,
                             type = if (openingOwed > 0) "EXPENSE" else "DEALER_PAYMENT",
                             amount = java.lang.Math.abs(openingOwed),
                             title = if (isBn) "প্রারম্ভিক পাওনা (ওপেনিং)" else "Opening Owed Balance",
-                            description = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance",
+                            description = finalDesc,
                             timestamp = openingTimestamp,
                             dealerId = dealer.id
                         )
@@ -1280,7 +1301,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                     } else {
                         filtered
                     }
-                    finalList.sortedByDescending { it.timestamp }
+                    finalList.sortedBy { it.timestamp }
                 }
 
                 AlertDialog(

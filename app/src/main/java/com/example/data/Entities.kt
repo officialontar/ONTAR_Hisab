@@ -24,6 +24,13 @@ data class User(
     fun getLocalizedShopName(isBn: Boolean): String {
         val emailClean = email.trim().lowercase()
         if (emailClean == "mdanisujjamanontar@gmail.com" || phone.trim() == "01319541875") {
+            if (shopName.isNotBlank() && 
+                shopName != "মা-বাবার দোয়া ভ্যারাইটিজ স্টোর" && 
+                shopName != "Maa-Babar Doa Varieties Store" && 
+                shopName != "My Shop" && 
+                shopName != "আমার দোকান") {
+                return shopName
+            }
             return if (isBn) "মা-বাবার দোয়া ভ্যারাইটিজ স্টোর" else "Maa-Babar Doa Varieties Store"
         }
         return shopName
@@ -32,6 +39,13 @@ data class User(
     fun getLocalizedOwnerName(isBn: Boolean): String {
         val emailClean = email.trim().lowercase()
         if (emailClean == "mdanisujjamanontar@gmail.com" || phone.trim() == "01319541875") {
+            if (!ownerName.isNullOrBlank() && 
+                ownerName != "মোঃ আনিসুজ্জামান অন্তর" && 
+                ownerName != "MD ANISUJJAMAN ONTAR" && 
+                ownerName != "Owner Name" && 
+                ownerName != "মালিকের নাম") {
+                return ownerName ?: ""
+            }
             return if (isBn) "মোঃ আনিসুজ্জামান অন্তর" else "MD ANISUJJAMAN ONTAR"
         }
         return ownerName ?: ""
@@ -59,7 +73,8 @@ data class Customer(
     val phone: String,
     val address: String? = null,
     val totalDue: Double = 0.0,
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val initialDetails: String? = null
 ) : Serializable
 
 @Entity(tableName = "dealers")
@@ -70,7 +85,8 @@ data class Dealer(
     val phone: String,
     val company: String? = null,
     val totalOwed: Double = 0.0,
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val initialDetails: String? = null
 ) : Serializable
 
 @Entity(tableName = "transactions")

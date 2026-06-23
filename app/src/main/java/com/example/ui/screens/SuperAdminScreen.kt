@@ -1543,16 +1543,13 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
 
     // 2. Edit Profile Dialog
     if (showEditDialog && userToEdit != null) {
-        var profileLoadFailed by remember(editProfilePic) { mutableStateOf(false) }
-        var shopLoadFailed by remember(editShopPic) { mutableStateOf(false) }
-        
-        val finalProfilePic = if (profileLoadFailed || editProfilePic.isBlank()) {
+        val finalProfilePic = if (editProfilePic.isBlank()) {
             "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
         } else {
             editProfilePic
         }
         
-        val finalShopPic = if (shopLoadFailed || editShopPic.isBlank()) {
+        val finalShopPic = if (editShopPic.isBlank()) {
             "https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=300&q=80"
         } else {
             editShopPic
@@ -1856,7 +1853,6 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                     ) {
                         AsyncImage(
                             model = rememberImageModel(finalProfilePic),
-                            onError = { profileLoadFailed = true },
                             contentDescription = "Profile Picture Preview",
                             modifier = Modifier
                                 .size(64.dp)
@@ -1933,7 +1929,6 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                     ) {
                         AsyncImage(
                             model = rememberImageModel(finalShopPic),
-                            onError = { shopLoadFailed = true },
                             contentDescription = "Shop Picture Preview",
                             modifier = Modifier
                                 .size(width = 96.dp, height = 64.dp)

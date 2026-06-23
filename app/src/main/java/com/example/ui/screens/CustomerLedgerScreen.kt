@@ -92,6 +92,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
     var customerPhotoUri by remember { mutableStateOf("") }
     var initialBalanceText by remember { mutableStateOf("") }
     var initialStatusIsDue by remember { mutableStateOf(true) } // true for Due / বাকি, false for Deposit / জমা
+    var customerInitialDetails by remember { mutableStateOf("") }
 
     // Search query state
     var searchQuery by remember { mutableStateOf("") }
@@ -259,6 +260,7 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                     customerPhone = ""
                     customerAddress = ""
                     customerPhotoUri = ""
+                    customerInitialDetails = ""
                     showAddCustomerDialog = true
                 },
                 containerColor = colors.primary,
@@ -726,6 +728,18 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                     .testTag("input_initial_balance")
                             )
 
+                            OutlinedTextField(
+                                value = customerInitialDetails,
+                                onValueChange = { customerInitialDetails = it },
+                                label = { Text(if (isBn) "কী কী বাকি নিলো (অপশনাল)" else "Items taken on Credit (Optional)") },
+                                leadingIcon = { Icon(Icons.Default.Info, null) },
+                                singleLine = false,
+                                maxLines = 3,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            )
+
                             Spacer(modifier = Modifier.height(10.dp))
 
                             // Photo selection block
@@ -926,7 +940,14 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                                 val photoValue = if (customerPhotoUri.isBlank()) null else customerPhotoUri
                                 val balanceAmount = viewModel.parseDoubleRobust(initialBalanceText)
                                 val finalInitialDue = if (initialStatusIsDue) balanceAmount else -balanceAmount
-                                viewModel.addCustomer(customerName.trim(), customerPhone.trim(), customerAddress.trim(), photoValue, finalInitialDue)
+                                viewModel.addCustomer(
+                                    name = customerName.trim(),
+                                    phone = customerPhone.trim(),
+                                    address = customerAddress.trim(),
+                                    photoUri = photoValue,
+                                    initialDue = finalInitialDue,
+                                    initialDetails = customerInitialDetails.trim()
+                                )
                                 showAddCustomerDialog = false
                             },
                             modifier = Modifier.testTag("btn_save_customer")
@@ -1317,13 +1338,20 @@ fun CustomerLedgerScreen(viewModel: AppViewModel) {
                         val earliestTimestamp = filtered.firstOrNull()?.timestamp ?: System.currentTimeMillis()
                         val openingTimestamp = earliestTimestamp - 60000L // 1 minute before the earliest subsequent transaction
                         
+                        val baseDesc = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance"
+                        val finalDesc = if (!customer.initialDetails.isNullOrBlank()) {
+                            if (isBn) "$baseDesc\n(${customer.initialDetails})" else "$baseDesc\n(${customer.initialDetails})"
+                        } else {
+                            baseDesc
+                        }
+
                         val openingTx = com.example.data.TransactionRecord(
                             id = -999,
                             userEmail = customer.userEmail,
                             type = if (openingBalance > 0) "CUSTOMER_DUE" else "CUSTOMER_PAYMENT",
                             amount = java.lang.Math.abs(openingBalance),
                             title = if (isBn) "প্রারম্ভিক ব্যালেন্স (ওপেনিং)" else "Opening Balance",
-                            description = if (isBn) "হিসাব খোলার সময়কাল" else "First added balance",
+                            description = finalDesc,
                             timestamp = openingTimestamp,
                             customerId = customer.id
                         )

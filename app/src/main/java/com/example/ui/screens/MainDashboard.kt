@@ -994,7 +994,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                             profilePic = editOwnerPicture.ifBlank { null },
                             shopPic = editShopPicture.ifBlank { null }
                         )
-                        // showProfileSettingsDialog = false // stay on the dialog as requested to review updated info
+                        showProfileSettingsDialog = false
                     },
                     shape = RoundedCornerShape(12.dp)
                 ) {
