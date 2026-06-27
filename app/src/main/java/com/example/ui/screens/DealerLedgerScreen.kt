@@ -75,12 +75,12 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
     var editDealerPhotoUri by remember { mutableStateOf("") }
 
     // Filter dealers dynamically
-    val filteredDealers = remember(dealersList, searchQuery) {
+    val filteredDealers = remember(sortedDealers, searchQuery) {
         if (searchQuery.isBlank()) {
-            dealersList
+            sortedDealers
         } else {
             val q = searchQuery.trim().lowercase()
-            dealersList.filter { dealer ->
+            sortedDealers.filter { dealer ->
                 dealer.name.lowercase().contains(q) || 
                 dealer.phone.contains(q) || 
                 (dealer.company?.lowercase()?.contains(q) ?: false)
@@ -458,7 +458,7 @@ fun DealerLedgerScreen(viewModel: AppViewModel) {
                                 }
                             }
                         } else {
-                            items(filteredDealers) { dealer ->
+                            items(filteredDealers, key = { it.id }) { dealer ->
                                 val serialNumber = sortedDealers.indexOfFirst { it.id == dealer.id } + 1
                                 DealerRecordCard(
                                     dealer = dealer,

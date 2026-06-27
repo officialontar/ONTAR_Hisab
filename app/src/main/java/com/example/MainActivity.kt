@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 // Password change dialog state
                 var showChangePinInDrawer by remember { mutableStateOf(false) }
                 var showFirebaseSettingsDialog by remember { mutableStateOf(false) }
+                var showOtaUpdateDialogInDrawer by remember { mutableStateOf(false) }
                 var oldPinInput by remember { mutableStateOf("") }
                 var newPinInput by remember { mutableStateOf("") }
                 var confirmPinInput by remember { mutableStateOf("") }
@@ -749,6 +750,22 @@ class MainActivity : ComponentActivity() {
                                             onClick = { showChangePinInDrawer = true }
                                         )
 
+                                        // Software Update Check
+                                        val otaConfigVal by viewModel.otaConfig.collectAsState()
+                                        val hasOtaUpdate = otaConfigVal.latestVersionCode > 1
+                                        MenuDrawerListItem(
+                                            icon = Icons.Default.Info,
+                                            title = if (isBn) {
+                                                if (hasOtaUpdate) "সফটওয়্যার আপডেট করুন (v${otaConfigVal.latestVersionName}) 🔥" else "অ্যাপ্লিকেশন আপডেট চেক"
+                                            } else {
+                                                if (hasOtaUpdate) "Download App Update (v${otaConfigVal.latestVersionName}) 🔥" else "Check App Update"
+                                            },
+                                            onClick = {
+                                                viewModel.toggleRightMenuDrawer(false)
+                                                showOtaUpdateDialogInDrawer = true
+                                            }
+                                        )
+
                                         // Data Recovery Support
                                         MenuDrawerListItem(
                                             icon = Icons.Default.Refresh,
@@ -925,6 +942,112 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+
+                // APP UPDATE DETAILS DIALOG
+                if (showOtaUpdateDialogInDrawer) {
+                    val otaConfig by viewModel.otaConfig.collectAsState()
+                    val hasUpdate = otaConfig.latestVersionCode > 1
+                    AlertDialog(
+                        onDismissRequest = { showOtaUpdateDialogInDrawer = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (hasUpdate) colors.primary else Color(0xFF0F9D58)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isBn) "সফটওয়্যার আপডেট তথ্য" else "App Update Information",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        text = {
+                            Column {
+                                if (hasUpdate) {
+                                    Text(
+                                        text = if (isBn) "একটি নতুন আপডেট সংস্করণ উপলব্ধ রয়েছে!" else "A new update version is available!",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = colors.primary,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    Text(
+                                        text = if (isBn) "ভার্সন: ${otaConfig.latestVersionName} (v${otaConfig.latestVersionCode})" else "Version: ${otaConfig.latestVersionName} (v${otaConfig.latestVersionCode})",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = colors.onSurface.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                    val customMsg = if (isBn) otaConfig.bengaliMessage else otaConfig.englishMessage
+                                    Text(
+                                        text = customMsg.ifBlank {
+                                            if (isBn) "সকল নতুন ফিচার ও বাগ ফিক্স পেতে এখনই ডাউনলোড করুন!" else "Download now to get all new features and bug fixes!"
+                                        },
+                                        fontSize = 14.sp,
+                                        color = colors.onSurface
+                                    )
+                                } else {
+                                    Text(
+                                        text = if (isBn) "আপনার অ্যাপ্লিকেশনটি সম্পূর্ণ আপডেট রয়েছে!" else "Your application is fully up to date!",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color(0xFF0F9D58),
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    Text(
+                                        text = if (isBn) "বর্তমান ভার্সন: ৭.০.১ (v1)" else "Current Version: 7.0.1 (v1)",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = colors.onSurface.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                    Text(
+                                        text = if (isBn) "নতুন কোনো আপডেট আসলে এখানে তথ্য পেয়ে যাবেন এবং সহজেই ডাউনলোড করতে পারবেন।" else "When a new update is released, you will find it here for quick download.",
+                                        fontSize = 14.sp,
+                                        color = colors.onSurface
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            if (hasUpdate) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(otaConfig.updateDownloadUrl))
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Could not open download link", Toast.LENGTH_SHORT).show()
+                                        }
+                                        showOtaUpdateDialogInDrawer = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = if (isBn) "ডাউনলোড করুন" else "Download Now", color = Color.White)
+                                }
+                            } else {
+                                Button(
+                                    onClick = { showOtaUpdateDialogInDrawer = false },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F9D58))
+                                ) {
+                                    Text(text = if (isBn) "ঠিক আছে" else "OK", color = Color.White)
+                                }
+                            }
+                        },
+                        dismissButton = if (hasUpdate) {
+                            {
+                                TextButton(onClick = { showOtaUpdateDialogInDrawer = false }) {
+                                    Text(text = if (isBn) "বন্ধ করুন" else "Cancel")
+                                }
+                            }
+                        } else null
+                    )
                 }
 
                 // FIREBASE DATABASE CONNECTION SETTINGS DIALOG

@@ -56,10 +56,10 @@ interface AppDao {
     suspend fun deleteStockItem(item: StockItem)
 
     // --- CUSTOMER QUERIES ---
-    @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY name ASC")
+    @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY id ASC")
     fun getCustomersOfUser(userEmail: String): Flow<List<Customer>>
 
-    @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY name ASC")
+    @Query("SELECT * FROM customers WHERE userEmail = :userEmail ORDER BY id ASC")
     suspend fun getCustomersOfUserList(userEmail: String): List<Customer>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -72,10 +72,10 @@ interface AppDao {
     suspend fun deleteCustomer(customer: Customer)
 
     // --- DEALER QUERIES ---
-    @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY name ASC")
+    @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY id ASC")
     fun getDealersOfUser(userEmail: String): Flow<List<Dealer>>
 
-    @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY name ASC")
+    @Query("SELECT * FROM dealers WHERE userEmail = :userEmail ORDER BY id ASC")
     suspend fun getDealersOfUserList(userEmail: String): List<Dealer>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

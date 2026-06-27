@@ -1019,6 +1019,7 @@ fun MainDashboard(viewModel: AppViewModel) {
     }
 
     // Calculations
+    val isBalanceVisible by viewModel.isBalanceVisible.collectAsState()
     val totalSales = transactionsFlow.filter { it.type == "SALE" }.sumOf { it.amount }
     val totalExpenses = transactionsFlow.filter { it.type == "EXPENSE" }.sumOf { it.amount }
     val netProfit = transactionsFlow.sumOf { it.profit }
@@ -1164,7 +1165,8 @@ fun MainDashboard(viewModel: AppViewModel) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val otaConfig by viewModel.otaConfig.collectAsState()
-                if (otaConfig.latestVersionCode > 1) {
+                val isUpdateBannerDismissed by viewModel.isUpdateBannerDismissed.collectAsState()
+                if (otaConfig.latestVersionCode > 1 && !isUpdateBannerDismissed) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = colors.primaryContainer.copy(alpha = 0.85f)
@@ -1174,61 +1176,77 @@ fun MainDashboard(viewModel: AppViewModel) {
                             .fillMaxWidth()
                             .padding(bottom = 12.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Build,
-                                    contentDescription = "Update Info",
-                                    tint = colors.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text(
-                                    text = if (isBn) "নতুন সফটওয়্যার আপডেট উপলব্ধ (v${otaConfig.latestVersionName})!" else "New Software Update Available (v${otaConfig.latestVersionName})!",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp,
-                                    color = colors.onPrimaryContainer
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (isBn) {
-                                    otaConfig.bengaliMessage.ifBlank { "সকল আপডেট ফিচার ও লাইফটাইম ডাটা ব্যাকআপ ফ্রিতে পেতে এখনই নিচের লিঙ্কে ক্লিক করে সফলভাবে আপডেট করে নিন!" }
-                                } else {
-                                    otaConfig.englishMessage.ifBlank { "To enjoy latest feature updates and premium lifetime data/image backup for free, click download below to update now!" }
-                                },
-                                fontSize = 12.sp,
-                                color = colors.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.End,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
-                                    onClick = {
-                                        try {
-                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(otaConfig.updateDownloadUrl))
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            // Fallback
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp).padding(end = 36.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Build,
+                                        contentDescription = "Update Info",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                     Text(
-                                        text = if (isBn) "ডাউনলোড ও আপডেট করুন" else "Download & Update",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color.White
+                                        text = if (isBn) "নতুন সফটওয়্যার আপডেট উপলব্ধ (v${otaConfig.latestVersionName})!" else "New Software Update Available (v${otaConfig.latestVersionName})!",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp,
+                                        color = colors.onPrimaryContainer
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (isBn) {
+                                        otaConfig.bengaliMessage.ifBlank { "সকল আপডেট ফিচার ও লাইফটাইম ডাটা ব্যাকআপ ফ্রিতে পেতে এখনই নিচের লিঙ্কে ক্লিক করে সফলভাবে আপডেট করে নিন!" }
+                                    } else {
+                                        otaConfig.englishMessage.ifBlank { "To enjoy latest feature updates and premium lifetime data/image backup for free, click download below to update now!" }
+                                    },
+                                    fontSize = 12.sp,
+                                    color = colors.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(otaConfig.updateDownloadUrl))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                // Fallback
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isBn) "ডাউনলোড ও আপডেট করুন" else "Download & Update",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(
+                                onClick = { viewModel.dismissUpdateBanner() },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Dismiss",
+                                    tint = colors.onPrimaryContainer.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -1324,27 +1342,26 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         color = colors.onBackground.copy(alpha = 0.6f)
                                     )
                                     Text(
-                                        text = "৳ ${String.format(Locale.getDefault(), "%,.1f", netProfit)}",
+                                        text = if (isBalanceVisible) "৳ ${String.format(Locale.getDefault(), "%,.1f", netProfit)}" else "৳ * * * *",
                                         style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = if (netProfit >= 0) colors.primary else colors.error,
+                                        color = if (netProfit >= 0 || !isBalanceVisible) colors.primary else colors.error,
                                         modifier = Modifier.testTag("net_profit_text")
                                     )
                                 }
-                                Box(
+                                IconButton(
+                                    onClick = { viewModel.toggleBalanceVisibility() },
                                     modifier = Modifier
                                         .clip(CircleShape)
-                                        .background(
-                                            if (netProfit >= 0) colors.primary.copy(alpha = 0.15f)
-                                            else colors.error.copy(alpha = 0.15f)
-                                        )
-                                        .padding(8.dp)
+                                        .background(colors.primary.copy(alpha = 0.12f))
+                                        .size(44.dp)
+                                        .testTag("btn_toggle_balance")
                                 ) {
                                     Icon(
-                                        imageVector = if (netProfit >= 0) Icons.Default.Check else Icons.Default.Clear,
-                                        contentDescription = null,
-                                        tint = if (netProfit >= 0) colors.primary else colors.error,
-                                        modifier = Modifier.size(28.dp)
+                                        imageVector = if (isBalanceVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = "Toggle Balance Visibility",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
@@ -1361,7 +1378,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "৳ ${String.format(Locale.getDefault(), "%,.1f", totalSales)}",
+                                        text = if (isBalanceVisible) "৳ ${String.format(Locale.getDefault(), "%,.1f", totalSales)}" else "৳ * * * *",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.onBackground
@@ -1375,7 +1392,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "৳ ${String.format(Locale.getDefault(), "%,.1f", totalExpenses)}",
+                                        text = if (isBalanceVisible) "৳ ${String.format(Locale.getDefault(), "%,.1f", totalExpenses)}" else "৳ * * * *",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.error
@@ -1394,7 +1411,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "৳ ${String.format(Locale.getDefault(), "%,.1f", totalDues)}",
+                                        text = if (isBalanceVisible) "৳ ${String.format(Locale.getDefault(), "%,.1f", totalDues)}" else "৳ * * * *",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFC5A000)
@@ -1408,7 +1425,7 @@ fun MainDashboard(viewModel: AppViewModel) {
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "৳ ${String.format(Locale.getDefault(), "%,.1f", totalOwed)}",
+                                        text = if (isBalanceVisible) "৳ ${String.format(Locale.getDefault(), "%,.1f", totalOwed)}" else "৳ * * * *",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = colors.secondary

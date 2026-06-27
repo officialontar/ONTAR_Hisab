@@ -62,6 +62,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
     var blockedDevicesCount by remember { mutableStateOf(0) }
     var customerDuesMap by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var dealerDuesMap by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var customerDuesCountMap by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
 
     // Dialog state variables for Admin functions
     var showEditDialog by remember { mutableStateOf(false) }
@@ -186,6 +187,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                 val syncTimeMap = mutableMapOf<String, Long>()
                 val custDuesMap = mutableMapOf<String, Double>()
                 val dealDuesMap = mutableMapOf<String, Double>()
+                val custDuesCountMapTemp = mutableMapOf<String, Int>()
 
                 // Calculate cumulative stats
                 var tempCust = 0
@@ -241,12 +243,14 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                         // Calculate sum of customer dues and dealer dues
                         custDuesMap[emailKey] = payload.customers.sumOf { it.totalDue }
                         dealDuesMap[emailKey] = payload.dealers.sumOf { it.totalOwed }
+                        custDuesCountMapTemp[emailKey] = payload.customers.count { it.totalDue > 0.0 }
                     } else {
                         statusMap[emailKey] = isSelf
                         syncTimeMap[emailKey] = if (isSelf) System.currentTimeMillis() else 0L
                         if (isSelf) actUsers++ else inactUsers++
                         custDuesMap[emailKey] = 0.0
                         dealDuesMap[emailKey] = 0.0
+                        custDuesCountMapTemp[emailKey] = 0
                     }
 
                     // Count active and blocked devices
@@ -267,6 +271,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                 lastSyncTimes = syncTimeMap
                 customerDuesMap = custDuesMap
                 dealerDuesMap = dealDuesMap
+                customerDuesCountMap = custDuesCountMapTemp
                 totalCustomersCount = tempCust
                 totalTransactionsCount = tempTx
                 
@@ -1195,6 +1200,7 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
 
                                 // Financial dues from the user's synced database
                                 val localMapKey = user.email.trim().lowercase()
+                                val customerDuesCount = customerDuesCountMap[localMapKey] ?: 0
                                 val customerDues = customerDuesMap[localMapKey] ?: 0.0
                                 val dealerDues = dealerDuesMap[localMapKey] ?: 0.0
 
@@ -1211,17 +1217,79 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                             .fillMaxWidth()
                                             .padding(8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.Top
                                     ) {
+                                        val displayCount = if (isBn) {
+                                            val bnDigits = customerDuesCount.toString().map {
+                                                when (it) {
+                                                    '0' -> '০'; '1' -> '১'; '2' -> '২'; '3' -> '৩'; '4' -> '৪'
+                                                    '5' -> '৫'; '6' -> '৬'; '7' -> '৭'; '8' -> '৮'; '9' -> '৯'
+                                                    else -> it
+                                                }
+                                            }.joinToString("")
+                                            "$bnDigits জন"
+                                        } else {
+                                            "$customerDuesCount"
+                                        }
+
+                                        // 1. Total Unpaid Due Customers
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
                                                 Text(
-                                                    text = if (isBn) "📉 গ্রাহকের মোট বাকি" else "📉 Total Cust Dues",
+                                                    text = "👥",
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(top = 1.dp)
+                                                )
+                                                Text(
+                                                    text = if (isBn) "মোট বাকি গ্রাহক" else "Total Due Customers", lineHeight = 11.sp,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = colors.onSurfaceVariant
                                                 )
                                             }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = displayCount,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFE65100)
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(1.dp)
+                                                .height(32.dp)
+                                                .align(Alignment.CenterVertically)
+                                                .background(colors.outlineVariant)
+                                        )
+
+                                        // 2. Total Customer Dues
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1.2f)
+                                                .padding(start = 8.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = "💰",
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(top = 1.dp)
+                                                )
+                                                Text(
+                                                    text = if (isBn) "গ্রাহকের মোট বাকি" else "Total Cust Dues", lineHeight = 11.sp,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = colors.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = "৳ ${String.format("%.2f", customerDues)}",
                                                 fontSize = 13.sp,
@@ -1233,31 +1301,43 @@ fun SuperAdminScreen(viewModel: AppViewModel) {
                                         Box(
                                             modifier = Modifier
                                                 .width(1.dp)
-                                                .height(24.dp)
+                                                .height(32.dp)
+                                                .align(Alignment.CenterVertically)
                                                 .background(colors.outlineVariant)
                                         )
 
+                                        // 3. Total Dealer Dues
                                         Column(
                                             modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 12.dp)
+                                                .weight(1.2f)
+                                                .padding(start = 8.dp)
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ShoppingCart,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF1976D2),
+                                                    modifier = Modifier.size(12.dp).padding(top = 1.dp)
+                                                )
                                                 Text(
-                                                    text = if (isBn) "📈 ডিলারের মোট পাওনা" else "📈 Total Dealer Dues",
+                                                    text = if (isBn) "ডিলারের মোট পাওনা" else "Total Dealer Dues", lineHeight = 11.sp,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = colors.onSurfaceVariant
                                                 )
                                             }
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = "৳ ${String.format("%.2f", dealerDues)}",
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF1976D2)
-                                             )
-                                         }
-                                     }
+                                            )
+                                        }
+                                    }
                                  }
 
                                 Spacer(modifier = Modifier.height(12.dp))

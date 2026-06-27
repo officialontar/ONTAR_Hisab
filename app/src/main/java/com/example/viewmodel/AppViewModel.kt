@@ -218,6 +218,13 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     private val _otaConfig = MutableStateFlow(com.example.data.OtaConfig())
     val otaConfig: StateFlow<com.example.data.OtaConfig> = _otaConfig.asStateFlow()
 
+    private val _isUpdateBannerDismissed = MutableStateFlow(false)
+    val isUpdateBannerDismissed: StateFlow<Boolean> = _isUpdateBannerDismissed.asStateFlow()
+
+    fun dismissUpdateBanner() {
+        _isUpdateBannerDismissed.value = true
+    }
+
     private val _isForceUpdateBypassed = MutableStateFlow(false)
     val isForceUpdateBypassed: StateFlow<Boolean> = _isForceUpdateBypassed.asStateFlow()
 
@@ -683,6 +690,21 @@ class AppViewModel(val repository: AppRepository, private val application: andro
     private val _isAiLoading = MutableStateFlow(false)
     val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
 
+    private val _isMsgDrafting = MutableStateFlow(false)
+    val isMsgDrafting: StateFlow<Boolean> = _isMsgDrafting.asStateFlow()
+
+    private val _draftedDueMsg = MutableStateFlow<String?>(null)
+    val draftedDueMsg: StateFlow<String?> = _draftedDueMsg.asStateFlow()
+
+    private val _isBalanceVisible = MutableStateFlow(prefs.getBoolean("is_balance_visible", true))
+    val isBalanceVisible: StateFlow<Boolean> = _isBalanceVisible.asStateFlow()
+
+    fun toggleBalanceVisibility() {
+        val nextVal = !_isBalanceVisible.value
+        _isBalanceVisible.value = nextVal
+        prefs.edit().putBoolean("is_balance_visible", nextVal).apply()
+    }
+
     // Cloud Sync Status Simulation
     private val _isCloudSyncing = MutableStateFlow(false)
     val isCloudSyncing: StateFlow<Boolean> = _isCloudSyncing.asStateFlow()
@@ -1010,7 +1032,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                         }
                         
                         val activeLocalCustomersFresh = repository.getCustomersList(user.email)
-                        for (remoteCust in remotePayload.customers) {
+                        for (remoteCust in remotePayload.customers.sortedBy { it.id }) {
                             val matchingLocal = activeLocalCustomersFresh.find { 
                                 it.phone.trim() == remoteCust.phone.trim() 
                             }
@@ -1068,7 +1090,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                         }
                         
                         val activeLocalDealersFresh = repository.getDealersList(user.email)
-                        for (remoteDlr in remotePayload.dealers) {
+                        for (remoteDlr in remotePayload.dealers.sortedBy { it.id }) {
                             val matchingLocal = activeLocalDealersFresh.find {
                                 it.phone.trim() == remoteDlr.phone.trim()
                             }
@@ -2103,9 +2125,9 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                         // Restore customers
                         val localCustomerMap = mutableMapOf<Int, Int>()
                         try {
-                            cloudPayload.customers.forEach { repository.insertCustomer(it.copy(id = 0, userEmail = cloudUser.email)) }
+                            cloudPayload.customers.sortedBy { it.id }.forEach { repository.insertCustomer(it.copy(id = 0, userEmail = cloudUser.email)) }
                             val freshCustomers = repository.getCustomers(cloudUser.email).firstOrNull() ?: emptyList()
-                            cloudPayload.customers.forEach { remoteC ->
+                            cloudPayload.customers.sortedBy { it.id }.forEach { remoteC ->
                                 val matchingL = freshCustomers.find {
                                     it.name.trim().lowercase() == remoteC.name.trim().lowercase() &&
                                     it.phone.trim() == remoteC.phone.trim()
@@ -2119,9 +2141,9 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                         // Restore dealers
                         val localDealerMap = mutableMapOf<Int, Int>()
                         try {
-                            cloudPayload.dealers.forEach { repository.insertDealer(it.copy(id = 0, userEmail = cloudUser.email)) }
+                            cloudPayload.dealers.sortedBy { it.id }.forEach { repository.insertDealer(it.copy(id = 0, userEmail = cloudUser.email)) }
                             val freshDealers = repository.getDealers(cloudUser.email).firstOrNull() ?: emptyList()
-                            cloudPayload.dealers.forEach { remoteD ->
+                            cloudPayload.dealers.sortedBy { it.id }.forEach { remoteD ->
                                 val matchingL = freshDealers.find {
                                     it.name.trim().lowercase() == remoteD.name.trim().lowercase() &&
                                     it.phone.trim() == remoteD.phone.trim()
@@ -2230,13 +2252,13 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                             cloudPayload.stockItems.forEach { repository.insertStockItem(it.copy(id = 0, userEmail = cloudUser.email)) }
                             
                             val localCustomerMap = mutableMapOf<Int, Int>()
-                            cloudPayload.customers.forEach { cust ->
+                            cloudPayload.customers.sortedBy { it.id }.forEach { cust ->
                                 val generatedId = repository.insertCustomer(cust.copy(id = 0, userEmail = cloudUser.email))
                                 localCustomerMap[cust.id] = generatedId.toInt()
                             }
  
                             val localDealerMap = mutableMapOf<Int, Int>()
-                            cloudPayload.dealers.forEach { dlr ->
+                            cloudPayload.dealers.sortedBy { it.id }.forEach { dlr ->
                                 val generatedId = repository.insertDealer(dlr.copy(id = 0, userEmail = cloudUser.email))
                                 localDealerMap[dlr.id] = generatedId.toInt()
                             }
@@ -2334,7 +2356,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 // Restore/Merge Customers
                 val localCustomerMap = mutableMapOf<Int, Int>()
                 val activeL = repository.getCustomers(userItem.email).firstOrNull() ?: emptyList()
-                for (remoteCust in remotePayload.customers) {
+                for (remoteCust in remotePayload.customers.sortedBy { it.id }) {
                     val matchingLocal = activeL.find { 
                         it.phone.trim() == remoteCust.phone.trim() 
                     }
@@ -2350,7 +2372,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 // Restore/Merge Dealers
                 val localDealerMap = mutableMapOf<Int, Int>()
                 val activeD = repository.getDealers(userItem.email).firstOrNull() ?: emptyList()
-                for (remoteDlr in remotePayload.dealers) {
+                for (remoteDlr in remotePayload.dealers.sortedBy { it.id }) {
                     val matchingLocal = activeD.find {
                         it.phone.trim() == remoteDlr.phone.trim()
                     }
@@ -2859,74 +2881,7 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             repository.insertDealer(dealer)
             triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
-                showToast(if (_isBengali.value) "নতুন ডিলার যোগ হয়েছে!" else "New dealer added successfully!")
-            }
-        }
-    }
-
-    fun recordDealerPayment(dealer: Dealer, amountPaid: Double) {
-        val email = _currentUser.value?.email ?: return
-        if (amountPaid <= 0) return
-
-        markLocalMutation()
-        viewModelScope.launch(Dispatchers.IO) {
-            // We reduce the debt we owe to them
-            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed - amountPaid))
-            repository.updateDealer(updated)
-
-            // Save payment transaction
-            val transaction = TransactionRecord(
-                userEmail = email,
-                type = "DEALER_PAYMENT",
-                amount = amountPaid,
-                profit = 0.0,
-                title = if (_isBengali.value) "ডিলার ${dealer.name}-কে পরিশোধ" else "Paid dealer ${dealer.name}",
-                description = if (_isBengali.value) "${dealer.company ?: "ডিলার"} পাওনা পরিশোধ" else "Owed amount paid to dealer",
-                dealerId = dealer.id
-            )
-            repository.insertTransaction(transaction)
-            triggerCloudSync(isManual = false)
-            withContext(Dispatchers.Main) {
-                showToast(if (_isBengali.value) "ডিলারের টাকা পরিশোধ সফল!" else "Dealer payout registered!")
-            }
-        }
-    }
-
-    fun recordDealerPurchase(dealer: Dealer, amountOwed: Double, itemPurchased: String) {
-        val email = _currentUser.value?.email ?: return
-        if (amountOwed <= 0) return
-
-        markLocalMutation()
-        viewModelScope.launch(Dispatchers.IO) {
-            // We increase the debt we owe to them
-            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed + amountOwed))
-            repository.updateDealer(updated)
-
-            // Save purchase transaction
-            val transaction = TransactionRecord(
-                userEmail = email,
-                type = "EXPENSE",
-                amount = amountOwed,
-                profit = -amountOwed, // direct purchase cost represents expenditure
-                title = if (_isBengali.value) "${dealer.name} হতে মালামাল ক্রয়" else "Purchased stock from ${dealer.name}",
-                description = itemPurchased,
-                dealerId = dealer.id
-            )
-            repository.insertTransaction(transaction)
-            triggerCloudSync(isManual = false)
-            withContext(Dispatchers.Main) {
-                showToast(if (_isBengali.value) "ডিলার ক্রয় রেকর্ড করা হয়েছে" else "Dealer purchase recorded")
-            }
-        }
-    }
-
-    fun deleteDealer(dealer: Dealer) {
-        markLocalMutation()
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.deleteDealer(dealer)
-            triggerCloudSync(isManual = false, uploadOnly = true)
-            withContext(Dispatchers.Main) {
-                showToast(if (_isBengali.value) "ডিলার রিমুভ করা হয়েছে" else "Dealer removed")
+                showToast(if (_isBengali.value) "নতুন ডিলার যোগ করা হয়েছে!" else "New supplier added successfully!")
             }
         }
     }
@@ -2954,7 +2909,70 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             repository.updateDealer(updated)
             triggerCloudSync(isManual = false, uploadOnly = true)
             withContext(Dispatchers.Main) {
-                showToast(if (_isBengali.value) "ডিলার প্রোফাইল আপডেট করা হয়েছে!" else "Dealer profile updated successfully!")
+                showToast(if (_isBengali.value) "ডিলার প্রোফাইল আপডেট করা হয়েছে!" else "Supplier profile updated successfully!")
+            }
+        }
+    }
+
+    fun recordDealerPayment(dealer: Dealer, amount: Double) {
+        val email = _currentUser.value?.email ?: return
+        if (amount <= 0) return
+
+        markLocalMutation()
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed - amount))
+            repository.updateDealer(updated)
+
+            val transaction = TransactionRecord(
+                userEmail = email,
+                type = "DEALER_PAYMENT",
+                amount = amount,
+                profit = 0.0,
+                title = if (_isBengali.value) "${dealer.name}-কে পরিশোধ করা হয়েছে" else "Paid supplier ${dealer.name}",
+                description = if (_isBengali.value) "বকেয়া বিল পরিশোধ বাবদ" else "Payment made towards pending balance",
+                dealerId = dealer.id
+            )
+            repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
+            withContext(Dispatchers.Main) {
+                showToast(if (_isBengali.value) "পেমেন্ট সফলভাবে সম্পন্ন হয়েছে" else "Payment recorded successfully")
+            }
+        }
+    }
+
+    fun recordDealerPurchase(dealer: Dealer, amount: Double, notes: String) {
+        val email = _currentUser.value?.email ?: return
+        if (amount <= 0) return
+
+        markLocalMutation()
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = dealer.copy(totalOwed = roundToTwoDecimals(dealer.totalOwed + amount))
+            repository.updateDealer(updated)
+
+            val transaction = TransactionRecord(
+                userEmail = email,
+                type = "EXPENSE",
+                amount = amount,
+                profit = -amount,
+                title = if (_isBengali.value) "${dealer.name} থেকে পণ্য ক্রয়" else "Purchased from supplier ${dealer.name}",
+                description = notes.ifBlank { if (_isBengali.value) "মালামাল ক্রয় বাবদ খরচ" else "Purchase of goods on credit/due" },
+                dealerId = dealer.id
+            )
+            repository.insertTransaction(transaction)
+            triggerCloudSync(isManual = false)
+            withContext(Dispatchers.Main) {
+                showToast(if (_isBengali.value) "পণ্য ক্রয় সফলভাবে সংরক্ষিত হয়েছে" else "Purchase recorded successfully")
+            }
+        }
+    }
+
+    fun deleteDealer(dealer: Dealer) {
+        markLocalMutation()
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteDealer(dealer)
+            triggerCloudSync(isManual = false, uploadOnly = true)
+            withContext(Dispatchers.Main) {
+                showToast(if (_isBengali.value) "ডিলার রিমুভ করা হয়েছে" else "Supplier removed successfully")
             }
         }
     }
@@ -3026,163 +3044,158 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 )
                 val response = GeminiClient.generateContentWithFallback(apiKey, request)
                 val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                _aiReportText.value = result ?: (if (_isBengali.value) "কোনো তথ্য পাওয়া যায়নি।" else "No advice received.")
+                _aiReportText.value = result ?: "No response from Gemini."
             } catch (e: Exception) {
-                Log.e("AppViewModel", "AI Error", e)
-                
-                // Extremely smart fallback business advisor generator when network or Google AI Studio is overloaded/503!
-                val offlineReport = if (_isBengali.value) {
-                    val profitStatus = if (netProfit > 0) {
-                        "মোট নিট লাভ হয়েছে ৳$netProfit যা খুবই উৎসাহব্যঞ্জক। এই ধারা অব্যাহত রাখুন এবং লাভ পুনরায় ব্যবসায় খাটান।"
-                    } else if (netProfit < 0) {
-                        "বর্তমানে আপনার ব্যবসায় কিছু লোকসান (৳${java.lang.Math.abs(netProfit)}) দেখা যাচ্ছে। খরচ নিয়ন্ত্রণ বা পণ্যের বিক্রয় বাড়াতে নজর দিন।"
-                    } else {
-                        "বর্তমানে ব্যবসায় সমান সমান বা প্রারম্ভিক অবস্থায় আছে। বিক্রি বাড়িয়ে মুনাফা বৃদ্ধির চেষ্টা করতে পারেন।"
-                    }
-
-                    val stockStatus = if (lowStockItems.isNotEmpty()) {
-                        "আপনার বেশ কয়েকটি পণ্য ফুরিয়ে আসছে বা স্টকে কম আছে: ${lowStockItems.joinToString(", ")}। নতুন ক্রেতা ধরে রাখতে জলদি স্টক রি-লোড করার পরামর্শ দেওয়া হচ্ছে।"
-                    } else {
-                        "আপনার সকল পণ্যের স্টক পর্যাপ্ত রয়েছে যা চমৎকার কাস্টমার সন্তুষ্টি বৃদ্ধি করবে।"
-                    }
-
-                    val dueStatus = if (totalCustomerDues > 0) {
-                        "কাস্টমারদের কাছে আপনার মোট ৳$totalCustomerDues বাকি পাওনা রয়েছে। দ্রুত মূলধন বাড়াতে ‘বাকি খাতা’ থেকে তাদেরকে তাগাদা এসএমএস পাঠান।"
-                    } else {
-                        "কাস্টমারদের কাছে আপনার কোনো বকেয়া পাওনা নেই, এটি খুবই প্রশংসনীয় অর্থনৈতিক পরিচালনা।"
-                    }
-
-                    """
-                    আসসালামু আলাইকুম! ✨ [স্মার্ট অফলাইন এআই ব্যাকআপ বিশ্লেষণ] ✨
-                    গুগল এআই অনলাইন সার্ভার সাময়িকভাবে ব্যস্ত থাকায় নিচে আপনার লাইভ ব্যাকআপ রিপোর্ট শেয়ার করা হলো:
-
-                    📊 আর্থিক স্বাস্থ্যের অবস্থা:
-                    $profitStatus
-
-                    📦 পণ্য স্টক পর্যবেক্ষণ:
-                    $stockStatus
-
-                    💰 বাকি বকেয়া পরামর্শ:
-                    $dueStatus
-
-                    💡 আগামী দিনের জন্য স্মার্ট পরামর্শ:
-                    ১. অধিক বিক্রিত পণ্যের স্টক সর্বদা সচল রাখুন ও অলাভজনক পণ্যে মূলধন আটকে রাখবেন না।
-                    ২. ডিলার বা পাওনাদারদের সাথে হিসাব পরিষ্কার রাখুন এবং প্রয়োজনে বাকি খাতা থেকে ডিজিটাল অনুস্মারক ব্যবহার করুন।
-                    """.trimIndent()
-                } else {
-                    val profitStatus = if (netProfit > 0) {
-                        "Net profit is ৳$netProfit which is encouraging. Maintain this momentum and reinvest in your business."
-                    } else if (netProfit < 0) {
-                        "We noticed a deficit of ৳${java.lang.Math.abs(netProfit)}. Focus on cutting unnecessary expenses or raising sales margins."
-                    } else {
-                        "No significant net profit/loss recorded yet. Initiate promotional sales of popular goods."
-                    }
-
-                    val stockStatus = if (lowStockItems.isNotEmpty()) {
-                        "The following stocks are running critically low: ${lowStockItems.joinToString(", ")}. Restock promptly to avoid missing daily customer demands."
-                    } else {
-                        "All inventory levels are looking healthy and sufficient."
-                    }
-
-                    val dueStatus = if (totalCustomerDues > 0) {
-                        "Your total pending collectibles from clients stands at ৳$totalCustomerDues. Send payment drafts from ledger to secure your working capital."
-                    } else {
-                        "You have virtually zero dues outstanding, which indicates top-tier cashflow management."
-                    }
-
-                    """
-                    Assalamu Alaikum! ✨ [Smart Offline AI Backup Advisory] ✨
-                    Google API is busy; your instant offline backup report is ready below:
-
-                    📊 Financial Health:
-                    $profitStatus
-
-                    📦 Inventory Observation:
-                    $stockStatus
-
-                    💰 Collectibles Suggestion:
-                    $dueStatus
-
-                    💡 Core Recommendations:
-                    1. Reinvest profit into high-moving items. Avoid tying up resources in slow-moving goods.
-                    2. Use the digital due billing feature to request timely customer paybacks.
-                    """.trimIndent()
-                }
-
-                _aiReportText.value = offlineReport
+                _aiReportText.value = "Error: ${e.localizedMessage}"
             } finally {
                 _isAiLoading.value = false
             }
         }
     }
 
-    // AI due payment draft messenger
-    private val _draftedDueMsg = MutableStateFlow<String?>(null)
-    val draftedDueMsg: StateFlow<String?> = _draftedDueMsg.asStateFlow()
+    fun buildMessageSignature(isBn: Boolean): String {
+        val user = _currentUser.value
+        val rawOwnerName = user?.getLocalizedOwnerName(isBn) ?: ""
+        val rawShopPhone = user?.phone ?: ""
+        val rawEmail = user?.email ?: ""
+        val owners = com.example.data.OwnerParser.deserialize(rawOwnerName, rawShopPhone, rawEmail)
+        
+        return if (owners.size <= 1) {
+            val owner = owners.firstOrNull()
+            val oName = owner?.name?.trim()?.ifBlank { null } ?: rawOwnerName
+            val oPhone = owner?.phone?.trim()?.ifBlank { null } ?: rawShopPhone
+            if (isBn) {
+                "\n\nধন্যবাদ ও আন্তরিক শুভেচ্ছা সহ:\n$oName ($oPhone)"
+            } else {
+                "\n\nThanks & Best Regards:\n$oName ($oPhone)"
+            }
+        } else {
+            if (isBn) {
+                val details = owners.mapIndexed { idx, owner ->
+                    val banglaNumWord = when(idx + 1) {
+                        1 -> "এক"
+                        2 -> "দুই"
+                        3 -> "তিন"
+                        4 -> "চার"
+                        5 -> "পাঁচ"
+                        6 -> "ছয়"
+                        7 -> "সাত"
+                        8 -> "আট"
+                        9 -> "নয়"
+                        10 -> "দশ"
+                        else -> "${idx + 1}"
+                    }
+                    "মালিক নম্বর $banglaNumWord: ${owner.name} (${owner.phone})"
+                }.joinToString("\n")
+                "\n\nধন্যবাদ ও আন্তরিক শুভেচ্ছা সহ দোকানের মালিকবৃন্দগণ:\n$details"
+            } else {
+                val details = owners.mapIndexed { idx, owner ->
+                    "Owner Number ${idx + 1}: ${owner.name} (${owner.phone})"
+                }.joinToString("\n")
+                "\n\nThanks & Best Regards to Shop Owners:\n$details"
+            }
+        }
+    }
 
-    private val _isMsgDrafting = MutableStateFlow(false)
-    val isMsgDrafting: StateFlow<Boolean> = _isMsgDrafting.asStateFlow()
+    private fun cleanDraftedBody(text: String): String {
+        val lines = text.split("\n")
+        val cleanedLines = lines.filter { line ->
+            val l = line.trim()
+            !(l.startsWith("দোকানদার:", ignoreCase = true) ||
+              l.startsWith("Shopkeeper:", ignoreCase = true) ||
+              l.startsWith("যোগাযোগ:", ignoreCase = true) ||
+              l.startsWith("Contact:", ignoreCase = true) ||
+              l.startsWith("ধন্যবাদ", ignoreCase = true) ||
+              l.startsWith("আন্তরিক শুভেচ্ছা", ignoreCase = true) ||
+              l.startsWith("Thanks &", ignoreCase = true) ||
+              l.startsWith("Best Regards", ignoreCase = true) ||
+              l.contains("মালিকবৃন্দ", ignoreCase = true) ||
+              l.contains("মালিক নম্বর", ignoreCase = true))
+        }
+        return cleanedLines.joinToString("\n").trim()
+    }
 
     fun generateAiDueMessage(customerName: String, totalDue: Double, address: String? = null) {
         val apiKey: String = getGeminiApiKey()
         val shopName = _currentUser.value?.shopName ?: "দোকান"
-        val shopPhone = _currentUser.value?.phone ?: ""
-        val ownerName = _currentUser.value?.ownerName ?: ""
- 
-        val locationText = if (!address.isNullOrBlank()) " ($address)" else ""
+        val rawShopPhone = _currentUser.value?.phone ?: ""
+        val rawOwnerName = _currentUser.value?.ownerName ?: ""
+        val rawEmail = _currentUser.value?.email ?: ""
+
+        val isBnVal = _isBengali.value
+
+        // Parse owners using OwnerParser
+        val owners = com.example.data.OwnerParser.deserialize(rawOwnerName, rawShopPhone, rawEmail)
+        
+        // Clean outputs - only output values, no label keys
+        val cleanOwnerNames = owners.map { it.name }.filter { it.isNotBlank() }.distinct().joinToString(if (isBnVal) ", " else ", ")
+        val cleanOwnerPhones = owners.map { it.phone }.filter { it.isNotBlank() }.distinct().joinToString(if (isBnVal) ", " else ", ")
+
         val isAdvance = totalDue < 0
         val displayAmount = if (isAdvance) java.lang.Math.abs(totalDue) else totalDue
-        val ownerLineBn = if (ownerName.isNotBlank()) "\nদোকানদারের পুরো নাম: $ownerName" else ""
-        val ownerLineEn = if (ownerName.isNotBlank()) "\nShopkeeper: $ownerName" else ""
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        val todayStr = sdf.format(java.util.Date())
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+        val nextStr = sdf.format(cal.time)
+
+        val locationText = if (!address.isNullOrBlank()) " (${address})" else ""
 
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-            // Local fallback due message writer if key is not set
-            _draftedDueMsg.value = if (_isBengali.value) {
+            val signature = buildMessageSignature(isBnVal)
+            _draftedDueMsg.value = if (isBnVal) {
                 if (isAdvance) {
-                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ!$signature"
                 } else {
-                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার পূর্বে বাকি বকেয়া রয়েছে ৳$displayAmount। আপনার বকেয়া পরিশোধের জন্য বিনীত অনুরোধ করছি। যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় $customerName$locationText। $shopName-এ আজকের তারিখ ($todayStr) পর্যন্ত আপনার বর্তমান বাকির পরিমাণ হচ্ছে ৳$displayAmount। আমাদের সুন্দর ব্যবসায়িক সম্পর্ক বজায় রাখতে আগামী $nextStr তারিখের মধ্যে বকেয়া টাকা পরিশোধের জন্য বিনীত অনুরোধ করছি।$signature"
                 }
             } else {
                 if (isAdvance) {
-                    "Assalamu Alaikum, Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us! Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us!$signature"
                 } else {
-                    "Assalamu Alaikum, Dear $customerName$locationText, your unpaid due at $shopName is ৳$displayAmount. Kindly clear your dues. Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear $customerName$locationText. Your current outstanding due at $shopName as of today ($todayStr) is ৳$displayAmount. We kindly request you to clear this due by $nextStr.$signature"
                 }
             }
             return
         }
- 
+
         _isMsgDrafting.value = true
         _draftedDueMsg.value = null
- 
+
         viewModelScope.launch {
-            val prompt = if (_isBengali.value) {
+            val prompt = if (isBnVal) {
                 if (isAdvance) {
                     """
                     কাস্টমারকে তার অগ্রিম বা জমা টাকার জন্য ধন্যবাদ জানিয়ে এবং তার ব্যালেন্স অবহিত করতে একটি মিষ্টি ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
                     গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
                     কাস্টমারের নাম: $customerName
                     কাস্টমারের এলাকা/ঠিকানা: ${address ?: "নির্দিষ্ট করা নেই"}
-                    অগ্রিম জমা পরিমাণ: ৳$displayAmount
+                    Agrim জমা পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
-                    যোগাযোগের ফোন নাম্বার: $shopPhone
-                    দোকানদারের নাম: $ownerName
+                    যোগাযোগের ফোন নাম্বার: $cleanOwnerPhones
+                    দোকানদারের নাম: $cleanOwnerNames
                     
-                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার সন্তুষ্ট হন। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    Keep it short, welcoming, respectful, and clear. Output only the SMS copy without any other text or signatures.
                     """.trimIndent()
                 } else {
                     """
-                    কাস্টমারকে বাকি পরিশোধের তাগাদা দিতে একটি মিষ্টি ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
-                    গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
+                    কাস্টমারকে বাকি পরিশোধের তাগাদা দিতে একটি অত্যন্ত মিষ্টি, ভদ্র ও প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
+                    গুরুত্বপূর্ণ শর্ত:
+                    ১. বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
+                    ২. আজকের তারিখ ($todayStr) এবং আগামী ৭ দিন পরের তারিখ ($nextStr) - এই দুটি তারিখই বার্তার ভেতর ব্যবহার করবে।
+                    ৩. বার্তার ভেতর অবশ্যই "বকেয়া এমাউন্ট" বা "বকেয়া পরিমাণ" না লিখে, এর পরিবর্তে "আজকের তারিখ ($todayStr) পর্যন্ত আপনার বর্তমান বাকির পরিমাণ হচ্ছে ৳$displayAmount" বা "আজকের ডেট ($todayStr) পর্যন্ত আপনার বর্তমান বাকির পরিমাণ হচ্ছে ৳$displayAmount" এই সুন্দর ও ভদ্র কথাটি ব্যবহার করবে (যেকোনো একটি সুন্দর শব্দবন্ধ ব্যবহার করবে, দুটো একসাথে মেলাবে না)।
+                    ৪. পরিশোধের শেষ সময় বা পেমেন্টের লাস্ট ডেট হিসেবে আগামী $nextStr তারিখের কথা সুন্দরভাবে উল্লেখ করবে (তবে আলাদাভাবে ব্র্যাকেটে "যা পেমেন্টের লাস্ট ডেট" বা "পরিশোধের শেষ তারিখ" এই ধরণের কোনো লেখা যোগ করবে না)।
+                    
                     কাস্টমারের নাম: $customerName
                     কাস্টমারের এলাকা/ঠিকানা: ${address ?: "নির্দিষ্ট করা নেই"}
-                    বাকি বকেয়া পরিমাণ: ৳$displayAmount
+                    আজকের তারিখ: $todayStr
+                    পরিশোধের শেষ তারিখ: $nextStr
+                    বাকির পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
-                    যোগাযোগের ফোন নাম্বার: $shopPhone
-                    দোকানদারের নাম: $ownerName
+                    যোগাযোগের ফোন নাম্বার: $cleanOwnerPhones
+                    দোকানদারের নাম: $cleanOwnerNames
                     
-                    বার্তাটি সংক্ষিপ্ত এবং সুন্দর থাকবে যেন কাস্টমার অসন্তুষ্ট না হন আর সহজে টাকা পরিশোধের কথা মনে করেন। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    Keep it short, welcoming, respectful, and clear. Output only the SMS copy without any other text or signatures.
                     """.trimIndent()
                 }
             } else {
@@ -3194,25 +3207,31 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     Customer Address/Location: ${address ?: "Not provided"}
                     Advance Deposit amount: ৳$displayAmount
                     Shop Name: $shopName
-                    Shop contact phone: $shopPhone
-                    Shopkeeper Name: $ownerName
-                    Keep it short, professional, and sweet. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    Shop contact phone: $cleanOwnerPhones
+                    Shopkeeper Name: $cleanOwnerNames
+                    Keep it short, welcoming, respectful, and clear. Output only the SMS copy without any other text or signatures.
                     """.trimIndent()
                 } else {
                     """
                     Draft a polite, professional SMS payment reminder message in English:
-                    Important constraint: You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
+                    Important constraints:
+                    1. You MUST begin the SMS body with the greeting 'Assalamu Alaikum'. Do NOT use other greetings like 'Namaskar', 'Hello', or 'Dear'.
+                    2. You MUST include both today's date ($todayStr) and the payment deadline date ($nextStr) in the message.
+                    
                     Customer Name: $customerName
                     Customer Address/Location: ${address ?: "Not provided"}
+                    Today's Date: $todayStr
+                    Payment Deadline: $nextStr
                     Due amount: ৳$displayAmount
                     Shop Name: $shopName
-                    Shop contact phone: $shopPhone
-                    Shopkeeper Name: $ownerName
-                    Keep it sweet, welcoming, respectful, and direct. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    Shop contact phone: $cleanOwnerPhones
+                    Shopkeeper Name: $cleanOwnerNames
+                    
+                    Keep it short, welcoming, respectful, and clear. Output only the SMS copy without any other text or signatures.
                     """.trimIndent()
                 }
             }
- 
+
             try {
                 val request = GeminiRequest(
                     contents = listOf(Content(parts = listOf(Part(text = prompt)))),
@@ -3220,19 +3239,26 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 )
                 val response = GeminiClient.generateContentWithFallback(apiKey, request)
                 val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                _draftedDueMsg.value = result?.trim()
+                if (result != null) {
+                    val cleanedBody = cleanDraftedBody(result)
+                    val signature = buildMessageSignature(isBnVal)
+                    _draftedDueMsg.value = "$cleanedBody$signature"
+                } else {
+                    _draftedDueMsg.value = null
+                }
             } catch (e: Exception) {
-                _draftedDueMsg.value = if (_isBengali.value) {
+                val signature = buildMessageSignature(isBnVal)
+                _draftedDueMsg.value = if (isBnVal) {
                     if (isAdvance) {
-                        "প্রিয় $customerName, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। সাথে থাকার জন্য ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
+                        "আসসালামু আলাইকুম, প্রিয় $customerName$locationText, $shopName এ আপনার ৳$displayAmount অগ্রিম জমা রয়েছে। আমাদের সাথে থাকার জন্য ধন্যবাদ!$signature"
                     } else {
-                        "প্রিয় $customerName, $shopName এ আপনার বকেয়া রয়েছে ৳$displayAmount। দয়া করে পরিশোধ করুন। যোগাযোগ: $shopPhone$ownerLineBn"
+                        "আসসালামু আলাইকুম, প্রিয় $customerName$locationText। $shopName-এ আজকের তারিখ ($todayStr) পর্যন্ত আপনার বর্তমান বাকির পরিমাণ হচ্ছে ৳$displayAmount। আমাদের সুন্দর ব্যবসায়িক সম্পর্ক বজায় রাখতে আগামী $nextStr তারিখের মধ্যে বকেয়া টাকা পরিশোধের জন্য বিনীত অনুরোধ করছি।$signature"
                     }
                 } else {
                     if (isAdvance) {
-                        "Dear $customerName, you have an advance credit of ৳$displayAmount at $shopName. Thank you! Phone: $shopPhone$ownerLineEn"
+                        "Assalamu Alaikum, Dear $customerName$locationText, you have a credit balance of ৳$displayAmount at $shopName. Thank you for being with us!$signature"
                     } else {
-                        "Dear $customerName, your pending payment of ৳$displayAmount is due at $shopName. Please resolve. Phone: $shopPhone$ownerLineEn"
+                        "Assalamu Alaikum, Dear $customerName$locationText. Your current outstanding due at $shopName as of today ($todayStr) is ৳$displayAmount. We kindly request you to clear this due by $nextStr.$signature"
                     }
                 }
             } finally {
@@ -3240,42 +3266,53 @@ class AppViewModel(val repository: AppRepository, private val application: andro
             }
         }
     }
-
     fun generateAiDealerMessage(dealerName: String, totalOwed: Double, companyName: String? = null) {
         val apiKey: String = getGeminiApiKey()
         val shopName = _currentUser.value?.shopName ?: "দোকান"
-        val shopPhone = _currentUser.value?.phone ?: ""
-        val ownerName = _currentUser.value?.ownerName ?: ""
- 
+        val rawShopPhone = _currentUser.value?.phone ?: ""
+        val rawOwnerName = _currentUser.value?.ownerName ?: ""
+        val rawEmail = _currentUser.value?.email ?: ""
+
+        val isBnVal = _isBengali.value
+
+        // Parse owners using OwnerParser
+        val owners = com.example.data.OwnerParser.deserialize(rawOwnerName, rawShopPhone, rawEmail)
+        
+        // Clean outputs - only output values, no label keys
+        val cleanOwnerNames = owners.map { it.name }.filter { it.isNotBlank() }.distinct().joinToString(if (isBnVal) ", " else ", ")
+        val cleanOwnerPhones = owners.map { it.phone }.filter { it.isNotBlank() }.distinct().joinToString(if (isBnVal) ", " else ", ")
+
         val companyText = if (!companyName.isNullOrBlank()) " ($companyName)" else ""
         val isAdvance = totalOwed < 0
         val displayAmount = if (isAdvance) java.lang.Math.abs(totalOwed) else totalOwed
-        val ownerLineBn = if (ownerName.isNotBlank()) "\nদোকানদারের পুরো নাম: $ownerName" else ""
-        val ownerLineEn = if (ownerName.isNotBlank()) "\nShopkeeper: $ownerName" else ""
+        val ownerLineBn = if (cleanOwnerNames.isNotBlank()) "\nদোকানদার: $cleanOwnerNames" else ""
+        val ownerLineEn = if (cleanOwnerNames.isNotBlank()) "\nShopkeeper: $cleanOwnerNames" else ""
+        val contactLineBn = if (cleanOwnerPhones.isNotBlank()) "\nযোগাযোগ: $cleanOwnerPhones" else ""
+        val contactLineEn = if (cleanOwnerPhones.isNotBlank()) "\nContact: $cleanOwnerPhones" else ""
 
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             // Local fallback due message writer if key is not set
-            _draftedDueMsg.value = if (_isBengali.value) {
+            _draftedDueMsg.value = if (isBnVal) {
                 if (isAdvance) {
-                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কোম্পানিকে আমাদের $shopName-এর পক্ষ থেকে ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি সরবরাহের অনুরোধ জানাচ্ছি। যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কোম্পানিকে আমাদের $shopName-এর পক্ষ থেকে ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি সরবরাহের অনুরোধ জানাচ্ছি।$contactLineBn$ownerLineBn"
                 } else {
-                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কাছে আমাদের $shopName-এর মোট ৳$displayAmount বকেয়া বা পাওনা দেনা রয়েছে। অতিসত্বর আমরা তা পরিশোধের চেষ্টা করব। যোগাযোগ: $shopPhone$ownerLineBn"
+                    "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName$companyText, আপনাদের কাছে আমাদের $shopName-এর মোট ৳$displayAmount বকেয়া বা পাওনা দেনা রয়েছে। অতিসত্বর আমরা তা পরিশোধের চেষ্টা করব।$contactLineBn$ownerLineBn"
                 }
             } else {
                 if (isAdvance) {
-                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, we have sent an advance payment of ৳$displayAmount from $shopName. Kindly dispatch our inventory stock. Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, we have sent an advance payment of ৳$displayAmount from $shopName. Kindly dispatch our inventory stock. Contact: $cleanOwnerPhones$ownerLineEn"
                 } else {
-                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, our outstanding trade payable is ৳$displayAmount from $shopName. We will settle this balance soon. Contact: $shopPhone$ownerLineEn"
+                    "Assalamu Alaikum, Dear Supplier $dealerName$companyText, our outstanding trade payable is ৳$displayAmount from $shopName. We will settle this balance soon. Contact: $cleanOwnerPhones$ownerLineEn"
                 }
             }
             return
         }
- 
+
         _isMsgDrafting.value = true
         _draftedDueMsg.value = null
- 
+
         viewModelScope.launch {
-            val prompt = if (_isBengali.value) {
+            val prompt = if (isBnVal) {
                 if (isAdvance) {
                     """
                     কোম্পানি ডিলার অথবা পাইকারি বিক্রেতাকে অগ্রিম টাকা পাঠিয়ে পণ্যের দ্রুত ডেলিভারি চেয়ে একটি মিষ্টি, পেশাদার ও ভদ্র প্রিমিয়াম এসএমএস বাংলাতে লিখে দাও।
@@ -3284,10 +3321,10 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     ডিলারের কোম্পানি: ${companyName ?: "নির্দিষ্ট করা নেই"}
                     অগ্রিম পরিশোধিত পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
-                    যোগাযোগের ফোন নাম্বার: $shopPhone
-                    দোকানদারের নাম: $ownerName
+                    যোগাযোগের ফোন নাম্বার: $cleanOwnerPhones
+                    দোকানদারের নাম: $cleanOwnerNames
                     
-                    বার্তাটি প্রফেশনাল ও সুন্দর থাকবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    বার্তাটি প্রফেশনাল ও সুন্দর থাকবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদার: $cleanOwnerNames' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
                     """.trimIndent()
                 } else {
                     """
@@ -3295,12 +3332,12 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     গুরুত্বপূর্ণ শর্ত: বার্তার একদম শুরুতে অবশ্যই মুসলিম ঐতিহ্যবাহী শুভেচ্ছা 'আসসালামু আলাইকুম' দিয়ে শুরু করবে। অন্য কোনো শুভেচ্ছা বা হ্যালো যেমন 'নমস্কার', 'হ্যালো', 'সুপ্রিয়' কখনোই ব্যবহার করবে না।
                     ডিলারের নাম: $dealerName
                     ডিলারের কোম্পানি: ${companyName ?: "নির্দিষ্ট করা নেই"}
-                    বকেয়া দেনার পরিমাণ: ৳$displayAmount
+                    বকেয়া পরিশোধের পরিমাণ: ৳$displayAmount
                     দোকানের নাম: $shopName
-                    যোগাযোগের ফোন নাম্বার: $shopPhone
-                    দোকানদারের নাম: $ownerName
+                    যোগাযোগের ফোন নাম্বার: $cleanOwnerPhones
+                    দোকানদারের নাম: $cleanOwnerNames
                     
-                    বার্তাটি সংক্ষিপ্ত ও প্রফেশনাল থাকবে এবং অতিসত্বর বিল বা হিসাব মেটানোর সদিচ্ছা প্রকাশ করবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদারের নাম: $ownerName' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
+                    বার্তাটি সংক্ষিপ্ত ও প্রফেশনাল থাকবে এবং অতিসত্বর বিল বা হিসাব মেটানোর সদিচ্ছা প্রকাশ করবে। যোগাযোগের ফোন নাম্বারের ঠিক নিচে আরেকটি নতুন লাইনে 'দোকানদার: $cleanOwnerNames' লিখে দিবে। কোনো অতিরিক্ত হ্যালো অথবা বাই বাক্য যোগ করবে না, স্রেফ বার্তাটি দাও।
                     """.trimIndent()
                 }
             } else {
@@ -3312,9 +3349,9 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     Company/Brand: ${companyName ?: "Not provided"}
                     Advance paid: ৳$displayAmount
                     Shop Name: $shopName
-                    Shop contact phone: $shopPhone
-                    Shopkeeper Name: $ownerName
-                    Keep it professional, concise, and sweet. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    Shop contact phone: $cleanOwnerPhones
+                    Shopkeeper Name: $cleanOwnerNames
+                    Keep it professional, concise, and sweet. Under the shop contact phone number, please output 'Shopkeeper: $cleanOwnerNames' on a new line. Output only the SMS copy.
                     """.trimIndent()
                 } else {
                     """
@@ -3324,13 +3361,13 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                     Company/Brand: ${companyName ?: "Not provided"}
                     Due trade debt: ৳$displayAmount
                     Shop Name: $shopName
-                    Shop contact phone: $shopPhone
-                    Shopkeeper Name: $ownerName
-                    Keep it respectful, acknowledging the pending settle due, expressing intentions of clearing it. Under the shop contact phone number, please output 'Shopkeeper: $ownerName' on a new line. Output only the SMS copy.
+                    Shop contact phone: $cleanOwnerPhones
+                    Shopkeeper Name: $cleanOwnerNames
+                    Keep it respectful, acknowledging the pending settle due, expressing intentions of clearing it. Under the shop contact phone number, please output 'Shopkeeper: $cleanOwnerNames' on a new line. Output only the SMS copy.
                     """.trimIndent()
                 }
             }
- 
+
             try {
                 val request = GeminiRequest(
                     contents = listOf(Content(parts = listOf(Part(text = prompt)))),
@@ -3340,17 +3377,17 @@ class AppViewModel(val repository: AppRepository, private val application: andro
                 val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 _draftedDueMsg.value = result?.trim()
             } catch (e: Exception) {
-                _draftedDueMsg.value = if (_isBengali.value) {
+                _draftedDueMsg.value = if (isBnVal) {
                     if (isAdvance) {
-                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি ডেলিভারীর অনুরোধ। যোগাযোগ: $shopPhone$ownerLineBn"
+                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount অগ্রিম পরিশোধ করা হয়েছে। মালামাল জলদি সরবরাহের অনুরোধ।$contactLineBn$ownerLineBn"
                     } else {
-                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount বকেয়া দেনা পরিশোধের আন্তরিক চেষ্টা করব। ধন্যবাদ! যোগাযোগ: $shopPhone$ownerLineBn"
+                        "আসসালামু আলাইকুম, প্রিয় ডিলার $dealerName, আপনাদের ৳$displayAmount বকেয়া দেনা পরিশোধের আন্তরিক চেষ্টা করব। ধন্যবাদ!$contactLineBn$ownerLineBn"
                     }
                 } else {
                     if (isAdvance) {
-                        "Assalamu Alaikum, Dear Supplier $dealerName, we paid ৳$displayAmount in advance. Please proceed with our stock shipment. Phone: $shopPhone$ownerLineEn"
+                        "Assalamu Alaikum, Dear Supplier $dealerName, we paid ৳$displayAmount in advance. Please proceed with our stock shipment. Contact: $cleanOwnerPhones$ownerLineEn"
                     } else {
-                        "Assalamu Alaikum, Dear Supplier $dealerName, we owe you an outstanding balance of ৳$displayAmount. We are working to resolve this. Phone: $shopPhone$ownerLineEn"
+                        "Assalamu Alaikum, Dear Supplier $dealerName, we owe you an outstanding balance of ৳$displayAmount. We are working to resolve this. Contact: $cleanOwnerPhones$ownerLineEn"
                     }
                 }
             } finally {
